@@ -1,31 +1,39 @@
-// The Market Square is its own room, generated for every office at play time (never saved into the map).
-// Office owners place one or more "Market Square entrance" tiles in the editor (tile field `villageId`);
-// each one becomes a teleporter into this room, and the room's exit leads back to the first entrance.
-// Offices without an entrance get one placed automatically near the spawn point.
+// The Market Square is a room of its own.
+//
+// * Office owners can customise it in the editor like any other room. It is marked `market: true`, and
+//   its special tiles say where each shopkeeper stands (`villageSpot: 'baker'`, ...), where each gathering
+//   spot is (`villageSpot: 'mine'`, ...) and which tile leads back to the office (`villageExit`).
+// * An office that never saved one gets the default room below, generated at play time.
+// * "Market Square entrance" tiles in the office (`villageId`) become teleporters into the square, and the
+//   exit tiles become teleporters back next to the first entrance. Those teleporters are wired at play time
+//   only, so moving an entrance in the editor never leaves stale links behind.
 
 import type { RealmData, Room } from '../session'
 
 export const MARKET_ROOM_NAME = 'Market Square'
-export const MARKET = {
-    width: 25,
-    height: 17,
-    /** Top-left of the stall/gathering layout used by the client (frontend VillageLayer LAYOUT). */
-    origin: { x: 4, y: 2 },
-    arrive: { x: 12, y: 14 },
-    exit: { x: 12, y: 16 },
-}
 
-type Tile = Room['tilemap'][`${number}, ${number}`] & { villageId?: string; [k: string]: unknown }
+/** Default positions inside the default room (the client falls back to the same layout). */
+export const DEFAULT_SPOTS: Record<string, { x: number; y: number }> = {
+    farmer: { x: 6, y: 4 }, baker: { x: 10, y: 4 }, smith: { x: 14, y: 4 }, tailor: { x: 18, y: 4 }, fishmonger: { x: 6, y: 9 },
+    dock: { x: 9, y: 10 }, field: { x: 12, y: 10 }, mine: { x: 15, y: 10 }, pasture: { x: 18, y: 10 },
+}
+const W = 25
+const H = 17
+const EXIT = { x: 12, y: 16 }
+
+type Tile = Room['tilemap'][`${number}, ${number}`] & { villageId?: string; villageSpot?: string; villageExit?: boolean; [k: string]: unknown }
+type MarketRoom = Room & { market?: boolean }
 const key = (x: number, y: number) => `${x}, ${y}` as `${number}, ${number}`
 
-function buildRoom(back: { roomIndex: number; x: number; y: number }): Room {
+export function isMarketRoom(room: Room) {
+    return !!(room as MarketRoom).market || room.name === MARKET_ROOM_NAME
+}
+
+/** The default Market Square: walled dirt plaza, stalls and gathering spots, forest around it. */
+export function defaultMarketRoom(): MarketRoom {
     const t: Record<string, Tile> = {}
-    const { width: W, height: H } = MARKET
-    // a forest all around the walled square, so the camera never shows empty space
     const PAD = 14
-    for (let x = -PAD; x < W + PAD; x++) {
-        for (let y = -PAD; y < H + PAD; y++) t[key(x, y)] = { floor: 'ground-normal_detailed_grass' }
-    }
+    for (let x = -PAD; x < W + PAD; x++) for (let y = -PAD; y < H + PAD; y++) t[key(x, y)] = { floor: 'ground-normal_detailed_grass' }
     for (let x = -PAD; x < W + PAD; x += 4) {
         for (let y = -PAD; y < H + PAD; y += 4) {
             // tree sprites are 5x5 tiles anchored at the bottom centre: keep the whole canopy outside the walls
@@ -35,8 +43,7 @@ function buildRoom(back: { roomIndex: number; x: number; y: number }): Room {
     }
     for (let x = 0; x < W; x++) {
         for (let y = 0; y < H; y++) {
-            const tile: Tile = { floor: 'ground-normal_detailed_grass' }
-            if (x >= 2 && x <= W - 3 && y >= 2 && y <= H - 3) tile.floor = 'ground-detailed_dirt'
+            const tile: Tile = { floor: x >= 2 && x <= W - 3 && y >= 2 && y <= H - 3 ? 'ground-detailed_dirt' : 'ground-normal_detailed_grass' }
             const wall =
                 y === 0 ? (x === 0 ? 'stone_wall_tl' : x === W - 1 ? 'stone_wall_tr' : 'stone_wall_top')
                 : y === H - 1 ? (x === 0 ? 'stone_wall_bl' : x === W - 1 ? 'stone_wall_br' : 'stone_wall_bottom')
@@ -48,38 +55,57 @@ function buildRoom(back: { roomIndex: number; x: number; y: number }): Room {
             t[key(x, y)] = tile
         }
     }
-    // the path out, through a gap in the bottom wall
-    for (let y = H - 3; y < H; y++) t[key(MARKET.exit.x, y)] = { floor: 'ground-detailed_dirt' }
-    t[key(MARKET.exit.x, MARKET.exit.y)] = { floor: 'ground-detailed_dirt', teleporter: back }
-    // a little clutter in the corners, clear of the stalls and gathering spots
+    for (let y = H - 3; y < H; y++) t[key(EXIT.x, y)] = { floor: 'ground-detailed_dirt' }
+    t[key(EXIT.x, EXIT.y)] = { floor: 'ground-detailed_dirt', villageExit: true }
     for (const [x, y, obj] of [[2, 13, 'village-crate'], [3, 13, 'village-small_crate'], [22, 13, 'village-crate'], [21, 2, 'village-small_crate']] as const) {
         t[key(x, y)] = { ...t[key(x, y)], object: obj }
     }
-    return { name: MARKET_ROOM_NAME, tilemap: t as Room['tilemap'] }
+    for (const [id, p] of Object.entries(DEFAULT_SPOTS)) t[key(p.x, p.y)] = { ...t[key(p.x, p.y)], villageSpot: id }
+    return { name: MARKET_ROOM_NAME, market: true, tilemap: t as Room['tilemap'] }
 }
 
 function walkable(tile: Tile | undefined) {
-    return !!tile && !!tile.floor && !tile.object && !tile.impassable && !tile.teleporter && !tile.villageId
+    return !!tile && !!tile.floor && !tile.object && !tile.impassable && !tile.teleporter && !tile.villageId && !tile.villageExit && !tile.villageSpot
 }
 
-/** A copy of the office map with the Market Square room added and entrances wired to it. */
+function tilesWhere(room: Room, pred: (t: Tile) => boolean) {
+    return Object.entries(room.tilemap)
+        .filter(([, t]) => pred(t as Tile))
+        .map(([k]) => { const [x, y] = k.split(',').map(Number); return { x, y } })
+}
+
+function besideTile(room: Room, p: { x: number; y: number }, fallback: { x: number; y: number }) {
+    return [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]
+        .map(([dx, dy]) => ({ x: p.x + dx, y: p.y + dy }))
+        .find(q => walkable(room.tilemap[key(q.x, q.y)] as Tile)) ?? fallback
+}
+
+/** For the editor: the map with a Market Square room to customise (the default one if none was saved). */
+export function withEditableMarket(map: RealmData): RealmData {
+    const data: RealmData = JSON.parse(JSON.stringify(map))
+    if (!data.rooms.some(isMarketRoom)) data.rooms.push(defaultMarketRoom())
+    return data
+}
+
+/** For playing: the map with the Market Square present and every entrance/exit wired as a teleporter. */
 export function withMarketSquare(map: RealmData): RealmData {
     const data: RealmData = JSON.parse(JSON.stringify(map))
-    if (data.rooms.some(r => r.name === MARKET_ROOM_NAME && (r as any).generated)) return data
-    const marketIndex = data.rooms.length
+    let marketIndex = data.rooms.findIndex(isMarketRoom)
+    if (marketIndex === -1) {
+        data.rooms.push(defaultMarketRoom())
+        marketIndex = data.rooms.length - 1
+    }
+    const market = data.rooms[marketIndex]
+    ;(market as MarketRoom).market = true
 
+    // entrances live in the office rooms
     const entrances: { roomIndex: number; x: number; y: number }[] = []
     data.rooms.forEach((room, roomIndex) => {
-        for (const [k, tile] of Object.entries(room.tilemap) as [string, Tile][]) {
-            if (tile.villageId) {
-                const [x, y] = k.split(',').map(Number)
-                entrances.push({ roomIndex, x, y })
-            }
-        }
+        if (roomIndex === marketIndex) return
+        for (const p of tilesWhere(room, t => !!t.villageId)) entrances.push({ roomIndex, ...p })
     })
-
-    // No entrance placed yet: put one a few steps from the spawn point.
     if (!entrances.length) {
+        // none placed yet: put one a few steps from the spawn point
         const sp = data.spawnpoint
         const room = data.rooms[sp.roomIndex]
         outer: for (let r = 2; r < 12; r++) {
@@ -94,19 +120,25 @@ export function withMarketSquare(map: RealmData): RealmData {
         }
     }
 
-    for (const e of entrances) {
-        const tile = data.rooms[e.roomIndex].tilemap[key(e.x, e.y)] as Tile
-        tile.teleporter = { roomIndex: marketIndex, x: MARKET.arrive.x, y: MARKET.arrive.y }
+    // exits live in the market; if the owner removed them all, fall back to the default exit spot
+    let exits = tilesWhere(market, t => !!t.villageExit)
+    if (!exits.length) {
+        const t = (market.tilemap[key(EXIT.x, EXIT.y)] ?? { floor: 'ground-detailed_dirt' }) as Tile
+        const fixed: Tile = { ...t, villageExit: true }
+        delete fixed.impassable
+        delete fixed.object
+        market.tilemap[key(EXIT.x, EXIT.y)] = fixed
+        exits = [EXIT]
     }
 
-    // Coming back, land on a free tile next to the first entrance (not on it, or you'd bounce straight back in).
-    const first = entrances[0] ?? { roomIndex: data.spawnpoint.roomIndex, x: data.spawnpoint.x, y: data.spawnpoint.y - 1 }
-    const room = data.rooms[first.roomIndex]
-    const landing = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, 1]]
-        .map(([dx, dy]) => ({ x: first.x + dx, y: first.y + dy }))
-        .find(p => walkable(room.tilemap[key(p.x, p.y)] as Tile)) ?? { x: data.spawnpoint.x, y: data.spawnpoint.y }
-    const market = buildRoom({ roomIndex: first.roomIndex, ...landing })
-    ;(market as any).generated = true
-    data.rooms.push(market)
+    const arrive = besideTile(market, exits[0], { x: EXIT.x, y: EXIT.y - 2 })
+    for (const e of entrances) {
+        ;(data.rooms[e.roomIndex].tilemap[key(e.x, e.y)] as Tile).teleporter = { roomIndex: marketIndex, ...arrive }
+    }
+    const first = entrances[0] ?? { roomIndex: data.spawnpoint.roomIndex, x: data.spawnpoint.x, y: data.spawnpoint.y }
+    const landing = besideTile(data.rooms[first.roomIndex], first, { x: data.spawnpoint.x, y: data.spawnpoint.y })
+    for (const x of exits) {
+        ;(market.tilemap[key(x.x, x.y)] as Tile).teleporter = { roomIndex: first.roomIndex, ...landing }
+    }
     return data
 }

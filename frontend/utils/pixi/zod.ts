@@ -16,6 +16,8 @@ const TileSchema = z.object({
   marketAreaId: z.string().optional(),
   poolId: z.string().optional(),
   villageId: z.string().optional(),
+  villageSpot: z.string().optional(),
+  villageExit: z.boolean().optional(),
 })
 
 const TileMapSchema = z.record(z.string().regex(/^(-?\d+), (-?\d+)$/), TileSchema)
@@ -24,6 +26,7 @@ const RoomSchema = z.object({
   name: z.string(),
   tilemap: TileMapSchema,
   channelId: z.string().optional(),
+  market: z.boolean().optional(),
 })
 
 const SpawnpointSchema = z.object({

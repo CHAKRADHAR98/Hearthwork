@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 export type Tool = 'None' | 'Hand' | 'ZoomIn' | 'ZoomOut' | 'Tile'  | 'Eraser'
 
-export type SpecialTile = 'None' | 'Impassable' | 'Teleport' | 'Spawn' | 'Private Area' | 'Market' | 'Pool' | 'Village'
+export type SpecialTile = 'None' | 'Impassable' | 'Teleport' | 'Spawn' | 'Private Area' | 'Market' | 'Pool' | 'Village' | 'Market Spot' | 'Market Exit'
 
 export type TileMode = 'Single' | 'Rectangle'
 

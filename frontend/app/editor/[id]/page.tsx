@@ -19,7 +19,7 @@ export default async function RealmEditor({ params }: { params: { id: string } }
 
     // Fetch realm data from backend
     const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
-    const response = await fetch(`${API_URL}/realms/${params.id}`, {
+    const response = await fetch(`${API_URL}/realms/${params.id}?editor=1`, {
         headers: {
             'Authorization': `Bearer ${token}`,
         },

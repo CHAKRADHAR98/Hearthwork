@@ -7,7 +7,7 @@ import { defaultSkin } from './Player/skins'
 import signal from '../signal'
 import { gsap } from 'gsap'
 import { drawEntrances, VillageLayer } from './village/VillageLayer'
-import { MARKET_ORIGIN, MARKET_ROOM, VILLAGE_NPCS } from '../village/data'
+import { MARKET_ROOM, VILLAGE_NPCS } from '../village/data'
 
 export class PlayApp extends App {
     private scale: number = 1.5
@@ -47,12 +47,17 @@ export class PlayApp extends App {
         this.setUpFadeTiles()
         this.spawnLocalPlayer()
         const room = this.realmData.rooms[index]
-        if (room.name === MARKET_ROOM) {
-            // The Market Square is its own generated room (see backend/src/village/marketRoom.ts).
-            const exit = Object.entries(room.tilemap).find(([, t]) => t.teleporter)?.[0]
-            const [ex, ey] = exit ? exit.split(',').map(Number) : [12, 16]
+        if ((room as any).market || room.name === MARKET_ROOM) {
+            // The Market Square room (customisable in the editor, see backend/src/village/marketRoom.ts).
+            const positions: Record<string, { x: number, y: number }> = {}
+            let exit: { x: number, y: number } | undefined
+            for (const [k, t] of Object.entries(room.tilemap)) {
+                const [x, y] = k.split(',').map(Number)
+                if (t.villageSpot) positions[t.villageSpot] = { x, y }
+                if (t.villageExit && !exit) exit = { x, y }
+            }
             this.village = new VillageLayer(this, this.layers.above_floor, this.layers.object)
-            await this.village.mount(VILLAGE_NPCS, MARKET_ORIGIN, this.realmData.spawnpoint, { x: ex, y: ey })
+            await this.village.mount(VILLAGE_NPCS, positions, exit)
         } else {
             drawEntrances(this.layers.above_floor, this.villageEntrances(index))
         }

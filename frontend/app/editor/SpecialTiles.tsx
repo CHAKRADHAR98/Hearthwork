@@ -1,7 +1,9 @@
 import React from 'react'
 import SpecialTileItem from './SpecialTileItem'
 import { SpecialTile } from '@/utils/pixi/types'
-import { Placeholder, FlyingSaucer, Tree, Desk, ChartLineUp, CurrencyDollar, Storefront } from '@phosphor-icons/react'
+import { Placeholder, FlyingSaucer, Tree, Desk, ChartLineUp, CurrencyDollar, Storefront, MapPin, SignOut } from '@phosphor-icons/react'
+import signal from '@/utils/signal'
+import { LAYOUT } from '@/utils/village/layout'
 
 type SpecialTilesProps = {
     specialTile: SpecialTile
@@ -47,10 +49,36 @@ const SpecialTiles:React.FC<SpecialTilesProps> = ({ specialTile, selectSpecialTi
             <SpecialTileItem
                 iconColor='yellow'
                 title='Market Square'
-                description='The entrance to the village game. Players who step here go to the Market Square and its five AI shopkeepers.'
+                description='Entrance to the village game. Place it in your office.'
                 selected={specialTile === 'Village'}
                 onClick={() => selectSpecialTile('Village')}>
                 <Storefront className='w-12 h-12'/>
+            </SpecialTileItem>
+            <SpecialTileItem
+                iconColor='red'
+                title='Market spot'
+                description='Where a shopkeeper or gathering spot goes (Market Square room).'
+                selected={specialTile === 'Market Spot'}
+                onClick={() => selectSpecialTile('Market Spot')}>
+                <MapPin className='w-12 h-12'/>
+            </SpecialTileItem>
+            <label className='w-[400px] px-8 pb-3 flex flex-col gap-1 text-xs text-hearth-sand'>
+                Spot to place
+                <select
+                    className='rounded-lg border border-hearth-line bg-hearth-ink px-2 py-1.5 text-sm text-hearth-parchment'
+                    defaultValue='farmer'
+                    onChange={e => { signal.emit('selectMarketSpot', e.target.value); selectSpecialTile('Market Spot') }}
+                >
+                    {LAYOUT.map(l => <option key={l.id} value={l.id}>{l.icon} {l.label}</option>)}
+                </select>
+            </label>
+            <SpecialTileItem
+                iconColor='green'
+                title='Market exit'
+                description='Leads back to the office (Market Square room).'
+                selected={specialTile === 'Market Exit'}
+                onClick={() => selectSpecialTile('Market Exit')}>
+                <SignOut className='w-12 h-12'/>
             </SpecialTileItem>
             <SpecialTileItem
                 iconColor='purple'

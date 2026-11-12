@@ -1,4 +1,4 @@
-import { withMarketSquare } from '../village/marketRoom'
+import { withEditableMarket, withMarketSquare } from '../village/marketRoom'
 import { Router, Request, Response, NextFunction } from 'express'
 import { GetPlayersInRoom, GetPlayerCounts } from './route-types'
 import { z } from 'zod'
@@ -159,6 +159,8 @@ export default function routes(): Router {
 
             // Players get the generated Market Square room; the editor gets the map exactly as saved.
             if (req.query.play === '1' && realm.map_data) realm.map_data = withMarketSquare(realm.map_data)
+            // The editor always gets a Market Square room to customise (the default one until it is saved).
+            if (req.query.editor === '1' && realm.map_data) realm.map_data = withEditableMarket(realm.map_data)
             return res.json({ realm })
         } catch (error) {
             console.error('Error fetching realm:', error)

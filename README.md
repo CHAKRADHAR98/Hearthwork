@@ -72,7 +72,7 @@ Optional: set `NEARAI_API_KEY` (AI shopkeepers) and `GOOGLE_CLIENT_ID` (Google s
 
 1. Open http://localhost:3000, register (or **Continue with Google**), click **Create Space**, then **Join** the office.
    → A HUD in the top-left shows the clock, your 40 starting coins and your NEAR wallet (`<name>-xxxxxx.hearthwork.testnet`).
-2. Click **🚶 Market** (or walk onto the glowing **🏘️ Market Square** tile next to spawn). → You enter the Market Square, a room of its own with five stalls, shopkeepers and four gathering spots. The **⬇ Back to the office** path at the bottom takes you back. Office owners can move the entrance: **Editor → Special Tiles → Market Square**.
+2. Click **🚶 Market** (or walk onto the glowing **🏘️ Market Square** tile next to spawn). → You enter the Market Square, a room of its own with five stalls, shopkeepers and four gathering spots. The **⬇ Back to the office** path at the bottom takes you back. Office owners can move the entrance (**Editor → Special Tiles → Market Square**) and redesign the Market Square itself: it appears as a room in the editor, with **Market spot** tiles for each shopkeeper and gathering spot and a **Market exit** tile.
 3. Stand by the **⛏️ Iron mine** and press **E**. → "Gathered +1 🪨 Iron ore". There's a 20 s cooldown per spot.
 4. Walk to **Tor** and press **E**, then **Sell** your iron. → Coins go up. In **Market board → On NEAR** a `trade` transaction appears with an explorer link.
 5. In Mira's shop, type "I'll give you 7 each" in **Haggle**. → She answers in character with a counter-offer. **Accept** buys at the agreed price.

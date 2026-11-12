@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js'
+import { LAYOUT } from '../village/layout'
 import { App } from './App'
 import signal from '../signal'
 import { Layer, TilemapSprites, Tool, TilePoint, Point, RealmData, Room, TileMode, SpriteMap, SpecialTile } from './types'
@@ -60,10 +61,13 @@ export class EditorApp extends App {
         this.tilemapSprites = {}
         this.collidersFromSpritesMap = {}
         this.gizmoSprites = {}
+        this.gizmoLabels = {}
 
         await super.loadRoomFromData(room)
 
         this.drawSpecialTiles()
+        // In the Market Square, always show where the shopkeepers, gathering spots and exit are.
+        if ((room as any).market) this.gizmoContainer.visible = true
 
         this.setUpInitialTilemapDataAndPointerEvents('floor')
         this.setUpInitialTilemapDataAndPointerEvents('above_floor')
@@ -132,6 +136,18 @@ export class EditorApp extends App {
             if (value.villageId) {
                 const [x, y] = key.split(',').map(Number)
                 const sprite = this.placeVillageSprite(x, y)
+                this.setUpEraserTool(sprite, x, y, 'gizmo')
+            }
+
+            if (value.villageSpot) {
+                const [x, y] = key.split(',').map(Number)
+                const sprite = this.placeSpotSprite(x, y, value.villageSpot)
+                this.setUpEraserTool(sprite, x, y, 'gizmo')
+            }
+
+            if (value.villageExit) {
+                const [x, y] = key.split(',').map(Number)
+                const sprite = this.placeExitSprite(x, y)
                 this.setUpEraserTool(sprite, x, y, 'gizmo')
             }
         }
@@ -333,6 +349,11 @@ export class EditorApp extends App {
         }
         delete this.collidersFromSpritesMap[key]
         delete this.gizmoSprites[key]
+        const label = this.gizmoLabels[key]
+        if (label) {
+            this.gizmoContainer.removeChild(label)
+            delete this.gizmoLabels[key]
+        }
     }
 
     private drawGridLines = () => {
@@ -373,6 +394,7 @@ export class EditorApp extends App {
         signal.on('changeRoomName', this.onChangeRoomName)
         signal.on('selectTileMode', this.onSelectTileMode)
         signal.on('showGizmos', this.onShowGizmos)
+        signal.on('selectMarketSpot', this.onSelectMarketSpot)
         signal.on('selectSpecialTile', this.onSelectSpecialTile)
         signal.on('selectEraserLayer', this.onSelectEraserLayer)
         signal.on('teleport', this.onCreateTeleporter)
@@ -495,6 +517,10 @@ export class EditorApp extends App {
             this.placePool(x, y, tile, snapshot)
         } else if (type === 'Village') {
             this.placeVillage(x, y, tile, snapshot)
+        } else if (type === 'Market Spot') {
+            this.placeSpot(x, y, tile, snapshot)
+        } else if (type === 'Market Exit') {
+            this.placeExit(x, y, tile, snapshot)
             return
         }
 
@@ -822,6 +848,82 @@ export class EditorApp extends App {
         this.updateRealmData(newRealmData, snapshot)
     }
 
+    /** Which shopkeeper or gathering spot the "Market spot" tile places (chosen in the Special Tiles panel). */
+    private selectedSpot: string = 'farmer'
+    private gizmoLabels: { [key: TilePoint]: PIXI.Text } = {}
+
+    private onSelectMarketSpot = (id: string) => {
+        this.selectedSpot = id
+    }
+
+    private gizmoLabel(x: number, y: number, text: string) {
+        const key = `${x}, ${y}` as TilePoint
+        if (this.gizmoLabels[key]) this.gizmoContainer.removeChild(this.gizmoLabels[key])
+        const t = new PIXI.Text({ text, style: { fontFamily: 'silkscreen', fontSize: 128, fill: 0xffffff, stroke: { color: 0x000000, width: 18 } } })
+        t.scale.set(0.1)
+        t.anchor.set(0.5, 1)
+        t.x = x * 32 + 16
+        t.y = y * 32 - 1
+        t.eventMode = 'none'
+        this.gizmoContainer.addChild(t)
+        this.gizmoLabels[key] = t
+    }
+
+    private placeSpot = (x: number, y: number, tile: PIXI.Sprite, snapshot: boolean) => {
+        const key = `${x}, ${y}` as TilePoint
+        const t = this.realmData.rooms[this.currentRoomIndex].tilemap[key]
+        if (t?.teleporter || t?.villageId || t?.villageExit || t?.impassable) return
+        const newRealmData = this.getRealmDataCopy()
+        const tilemap = newRealmData.rooms[this.currentRoomIndex].tilemap
+        // each shopkeeper / gathering spot exists once: move it if it was placed elsewhere
+        for (const [k, v] of Object.entries(tilemap)) {
+            if (v.villageSpot === this.selectedSpot && k !== key) {
+                delete v.villageSpot
+                const [ox, oy] = k.split(',').map(Number)
+                this.removeGizmoSpriteAtPosition(ox, oy)
+                if (Object.keys(v).length === 0) delete tilemap[k as TilePoint]
+            }
+        }
+        tilemap[key] = { ...tilemap[key], villageSpot: this.selectedSpot }
+        this.updateRealmData(newRealmData, snapshot)
+        this.placeSpotSprite(x, y, this.selectedSpot, tile)
+    }
+
+    private placeSpotSprite = (x: number, y: number, id: string, tile?: PIXI.Sprite) => {
+        const key = `${x}, ${y}` as TilePoint
+        const sprite = tile || new PIXI.Sprite(PIXI.Texture.from('/sprites/spawn-tile.png'))
+        sprite.tint = 0xFF8A3D
+        sprite.x = x * 32
+        sprite.y = y * 32
+        this.gizmoContainer.addChild(sprite)
+        this.gizmoSprites[key] = sprite
+        const info = LAYOUT.find(l => l.id === id)
+        this.gizmoLabel(x, y, info ? `${info.icon} ${info.label}` : id)
+        return sprite
+    }
+
+    private placeExit = (x: number, y: number, tile: PIXI.Sprite, snapshot: boolean) => {
+        const key = `${x}, ${y}` as TilePoint
+        const t = this.realmData.rooms[this.currentRoomIndex].tilemap[key]
+        if (t?.teleporter || t?.villageId || t?.villageSpot || t?.villageExit) return
+        const newRealmData = this.getRealmDataCopy()
+        newRealmData.rooms[this.currentRoomIndex].tilemap[key] = { ...newRealmData.rooms[this.currentRoomIndex].tilemap[key], villageExit: true }
+        this.updateRealmData(newRealmData, snapshot)
+        this.placeExitSprite(x, y, tile)
+    }
+
+    private placeExitSprite = (x: number, y: number, tile?: PIXI.Sprite) => {
+        const key = `${x}, ${y}` as TilePoint
+        const sprite = tile || new PIXI.Sprite(PIXI.Texture.from('/sprites/teleport-tile.png'))
+        sprite.tint = 0x7FB069
+        sprite.x = x * 32
+        sprite.y = y * 32
+        this.gizmoContainer.addChild(sprite)
+        this.gizmoSprites[key] = sprite
+        this.gizmoLabel(x, y, '⬇ exit to office')
+        return sprite
+    }
+
     private placeVillage = (x: number, y: number, tile: PIXI.Sprite, snapshot: boolean) => {
         const key = `${x}, ${y}` as TilePoint
         const t = this.realmData.rooms[this.currentRoomIndex].tilemap[key]
@@ -856,6 +958,8 @@ export class EditorApp extends App {
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].marketAreaId
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].poolId
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].villageId
+            delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].villageSpot
+            delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].villageExit
 
             // delete the key if no data on it
             if (Object.keys(newRealmData.rooms[this.currentRoomIndex].tilemap[key]).length === 0) {
@@ -1061,6 +1165,16 @@ export class EditorApp extends App {
             marketTile.tint = 0xAA44FF
             const layer = 'gizmo'
             return { data: {} as SpriteSheetTile, layer, tile: marketTile, type: 'Market' }
+        } else if (this.specialTileMode === 'Market Spot') {
+            const spotTile = new PIXI.Sprite(PIXI.Texture.from('/sprites/spawn-tile.png'))
+            spotTile.tint = 0xFF8A3D
+            const layer = 'gizmo'
+            return { data: {} as SpriteSheetTile, layer, tile: spotTile, type: 'Market Spot' }
+        } else if (this.specialTileMode === 'Market Exit') {
+            const exitTile = new PIXI.Sprite(PIXI.Texture.from('/sprites/teleport-tile.png'))
+            exitTile.tint = 0x7FB069
+            const layer = 'gizmo'
+            return { data: {} as SpriteSheetTile, layer, tile: exitTile, type: 'Market Exit' }
         } else if (this.specialTileMode === 'Village') {
             const villageTile = new PIXI.Sprite(PIXI.Texture.from('/sprites/teleport-tile.png'))
             villageTile.tint = 0xE0B93A
@@ -1375,6 +1489,7 @@ export class EditorApp extends App {
         signal.off('changeRoomName', this.onChangeRoomName)
         signal.off('selectTileMode', this.onSelectTileMode)
         signal.off('showGizmos', this.onShowGizmos)
+        signal.off('selectMarketSpot', this.onSelectMarketSpot)
         signal.off('selectSpecialTile', this.onSelectSpecialTile)
         signal.off('selectEraserLayer', this.onSelectEraserLayer)
         signal.off('teleport', this.onCreateTeleporter)

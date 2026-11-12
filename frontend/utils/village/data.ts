@@ -1,5 +1,5 @@
 // Client-side copy of static village info (names, skins, icons). Live prices and balances come from the server.
-import type { NpcInfo } from '../pixi/village/VillageLayer'
+import type { NpcInfo } from './layout'
 
 export const VILLAGE_NPCS: NpcInfo[] = [
     { id: 'farmer', name: 'Bram', title: 'Farmer', skin: '005', open: true, icon: '🌾' },

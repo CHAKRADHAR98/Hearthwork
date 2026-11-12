@@ -7,37 +7,12 @@ import type { PlayApp } from '../PlayApp'
 import signal from '@/utils/signal'
 import { TilePoint } from '../types'
 
-export type VillageSpotKind = 'shop' | 'gather'
-export interface VillageSpot {
-    kind: VillageSpotKind
-    id: string
-    label: string
-    icon: string
-    x: number // relative to market origin
-    y: number
-}
+import { LAYOUT, NpcInfo, VillageSpot } from '../../village/layout'
+export { LAYOUT } from '../../village/layout'
+export type { NpcInfo, VillageSpot, VillageSpotKind } from '../../village/layout'
 
-export interface NpcInfo {
-    id: string
-    name: string
-    title: string
-    skin: string
-    open: boolean
-    icon: string
-}
-
-// Market Square layout (tiles, relative to the origin). Shops on the top row, gathering spots below.
-export const LAYOUT: VillageSpot[] = [
-    { kind: 'shop', id: 'farmer', label: 'Bram · Farmer', icon: '🌾', x: 2, y: 2 },
-    { kind: 'shop', id: 'baker', label: 'Mira · Baker', icon: '🍞', x: 6, y: 2 },
-    { kind: 'shop', id: 'smith', label: 'Tor · Blacksmith', icon: '🔨', x: 10, y: 2 },
-    { kind: 'shop', id: 'tailor', label: 'Ivo · Tailor', icon: '🧵', x: 14, y: 2 },
-    { kind: 'shop', id: 'fishmonger', label: 'Nell · Fishmonger', icon: '🐟', x: 2, y: 7 },
-    { kind: 'gather', id: 'dock', label: 'Fishing dock', icon: '🎣', x: 5, y: 8 },
-    { kind: 'gather', id: 'field', label: 'Wheat field', icon: '🌾', x: 8, y: 8 },
-    { kind: 'gather', id: 'mine', label: 'Iron mine', icon: '⛏️', x: 11, y: 8 },
-    { kind: 'gather', id: 'pasture', label: 'Sheep pasture', icon: '🐑', x: 14, y: 8 },
-]
+/** Default layout origin inside the default Market Square room (backend/src/village/marketRoom.ts DEFAULT_SPOTS). */
+const MARKET_ORIGIN_DEFAULT = { x: 4, y: 2 }
 const WIDTH = 17
 const HEIGHT = 11
 
@@ -87,30 +62,22 @@ export class VillageLayer {
         return null
     }
 
-    /** `origin` is fixed inside the generated Market Square room; `exit` is the tile that leads back to the office. */
-    async mount(npcs: NpcInfo[], origin: { x: number; y: number } | null, spawn: { x: number; y: number }, exit?: { x: number; y: number }) {
-        this.origin = origin ?? this.findOrigin(spawn)
-        if (!this.origin) {
-            console.warn('[village] no room for the Market Square on this map')
-            return
-        }
-        const o = this.origin
+    /** Absolute tile position of every shop and gathering spot in this room. */
+    pos: Record<string, { x: number; y: number }> = {}
+
+    /**
+     * `positions` come from the room's villageSpot tiles (customisable in the editor); anything missing
+     * falls back to the default layout. `exit` is the tile that leads back to the office.
+     */
+    async mount(npcs: NpcInfo[], positions: Record<string, { x: number; y: number }>, exit?: { x: number; y: number }) {
+        const o = MARKET_ORIGIN_DEFAULT
+        this.origin = o
+        for (const spot of LAYOUT) this.pos[spot.id] = positions[spot.id] ?? { x: o.x + spot.x, y: o.y + spot.y }
         this.floor.addChild(this.container)
 
-        // Market square ground: soft cobblestone area
-        const ground = new PIXI.Graphics()
-        ground.roundRect(o.x * 32 - 8, o.y * 32 + 8, WIDTH * 32 + 16, HEIGHT * 32 - 8, 18).fill({ color: 0xd8c3a5, alpha: 0.35 })
-        this.container.addChild(ground)
-        const title = new PIXI.Text({ text: '🏘️ MARKET SQUARE', style: { fontFamily: 'silkscreen', fontSize: 128, fill: 0xfff3d6 } })
-        title.scale.set(0.11)
-        title.anchor.set(0.5, 0)
-        title.x = (o.x + WIDTH / 2) * 32
-        title.y = o.y * 32 + 12
-        this.container.addChild(title)
-
         for (const spot of LAYOUT) {
-            const tx = o.x + spot.x
-            const ty = o.y + spot.y
+            const tx = this.pos[spot.id].x
+            const ty = this.pos[spot.id].y
             const g = new PIXI.Graphics()
             if (spot.kind === 'shop') {
                 g.roundRect((tx - 1) * 32 + 4, (ty - 0.5) * 32, 3 * 32 - 8, 2 * 32, 8).fill({ color: STALL_COLORS[spot.id] ?? 0x888888, alpha: 0.55 })
@@ -140,16 +107,17 @@ export class VillageLayer {
             if (!spot) continue
             const npc = new Player(info.skin, this.app, `${info.name}`)
             await npc.init()
-            npc.setPosition(o.x + spot.x, o.y + spot.y)
+            const at = this.pos[spot.id]
+            npc.setPosition(at.x, at.y)
             npc.parent.eventMode = 'static'
             npc.parent.cursor = 'pointer'
             npc.parent.on('pointerdown', e => {
                 e.stopPropagation()
-                this.app.player.moveToTile(o.x + spot.x, o.y + spot.y + 1)
+                this.app.player.moveToTile(at.x, at.y + 1)
                 signal.emit('villageOpen', { kind: 'shop', id: info.id })
             })
             this.objects.addChild(npc.parent)
-            this.app.blocked.add(`${o.x + spot.x}, ${o.y + spot.y}` as TilePoint)
+            this.app.blocked.add(`${at.x}, ${at.y}` as TilePoint)
             this.npcs[info.id] = npc
         }
         this.app.sortObjectsByY()
@@ -189,8 +157,8 @@ export class VillageLayer {
         const p = this.app.player.currentTilePosition
         let found: VillageSpot | null = null
         for (const s of LAYOUT) {
-            const sx = this.origin.x + s.x
-            const sy = this.origin.y + s.y
+            const sx = this.pos[s.id].x
+            const sy = this.pos[s.id].y
             const dx = Math.abs(p.x - sx)
             const dy = p.y - sy
             if (dx <= 1 && dy >= -1 && dy <= (s.kind === 'shop' ? 2 : 1)) { found = s; break }
@@ -204,8 +172,11 @@ export class VillageLayer {
 
     /** Walk the local player to the Market Square. */
     walkHere() {
-        if (!this.origin) return
-        this.app.player.moveToTile(this.origin.x + 8, this.origin.y + 5)
+        const all = Object.values(this.pos)
+        if (!all.length) return
+        const cx = Math.round(all.reduce((a, p) => a + p.x, 0) / all.length)
+        const cy = Math.round(all.reduce((a, p) => a + p.y, 0) / all.length)
+        this.app.player.moveToTile(cx, cy)
     }
 
     destroy() {
