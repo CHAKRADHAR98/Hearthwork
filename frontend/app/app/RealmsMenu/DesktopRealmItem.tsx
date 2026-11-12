@@ -86,13 +86,18 @@ const DesktopRealmItem:React.FC<DesktopRealmItemProps> = ({ name, id, shareId, s
                         </div>
                     )}
 
+                    {/* Always-visible call to action */}
+                    <div className='pointer-events-none absolute bottom-3 right-3 z-30 rounded-xl bg-hearth-honey px-4 py-2 font-bold text-sm text-hearth-ink shadow-[0_3px_0_#7a5a16]'>
+                        Enter office →
+                    </div>
+
                     {/* Corner accent */}
                     <div className='absolute top-0 right-0 w-4 h-4 border-t border-r border-cyber-cyan/20 group-hover:border-cyber-cyan/60 transition-colors duration-300 z-30' />
                 </div>
             </Link>
 
             <div className='mt-2 flex flex-row justify-between items-center'>
-                <p className='text-sm font-orbitron text-gray-400 tracking-wider group-hover:text-cyber-cyan transition-colors duration-200'>{name}</p>
+                <p className='font-pixel text-lg text-hearth-parchment group-hover:text-hearth-honey transition-colors duration-200'>{name}</p>
                 {!shared && (
                     <div className='flex flex-row'>
                         <LinkIcon className='h-7 w-7 cursor-pointer text-gray-600 hover:text-cyber-cyan p-1 transition-colors duration-200' onClick={copyShareLink}/>
