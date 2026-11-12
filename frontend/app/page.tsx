@@ -33,15 +33,15 @@ export default function Index() {
             &gt; Initializing...
           </p>
           <h1 className='font-orbitron font-black text-6xl sm:text-7xl tracking-wider text-white text-glow-cyan select-none'>
-            SLOT<span className='text-cyber-cyan'>_</span>0
+            HEARTH<span className='text-cyber-cyan'>WORK</span>
           </h1>
           <div className='w-full h-px bg-gradient-to-r from-transparent via-cyber-cyan to-transparent mt-2 opacity-50' />
         </div>
 
         {/* Subtitle */}
-        <p className='text-gray-400 text-sm sm:text-base leading-relaxed max-w-md'>
+        <p className='text-gray-400 text-sm sm:text-base leading-relaxed max-w-lg'>
           <span className='text-cyber-cyan font-orbitron text-xs'>&gt;&nbsp;</span>
-          Build with your community, set on-chain goals, and let the market bet on your success.
+          A virtual office for your team, with a living village economy next door. AI shopkeepers with NEAR wallets haggle, hoard, go bankrupt and hire you. No wallet or seed phrase needed.
         </p>
 
         {/* Character + CTA row */}

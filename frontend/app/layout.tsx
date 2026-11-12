@@ -20,7 +20,7 @@ const defaultUrl = process.env.VERCEL_URL
 export const metadata = {
   metadataBase: new URL(defaultUrl),
   title: "Hearthwork",
-  description: "This is a community driven platform.",
+  description: "A virtual office with a living village economy on NEAR.",
   icons: {
     icon: '/logo.png',
     shortcut: '/logo.png',
