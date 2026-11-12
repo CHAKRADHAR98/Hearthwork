@@ -8,6 +8,7 @@ import signal from '../signal'
 import { gsap } from 'gsap'
 import { drawEntrances, VillageLayer } from './village/VillageLayer'
 import { MARKET_ROOM, VILLAGE_NPCS } from '../village/data'
+import { BuildSite, BuiltLandmark, ProjectView, villageStore } from '../village/client'
 
 export class PlayApp extends App {
     private scale: number = 1.5
@@ -58,6 +59,8 @@ export class PlayApp extends App {
             }
             this.village = new VillageLayer(this, this.layers.above_floor, this.layers.object)
             await this.village.mount(VILLAGE_NPCS, positions, exit)
+            const store = villageStore.get()
+            if (store.buildSite?.roomIndex === index) this.village.setBuildSite(store.buildSite, store.state?.project ?? null)
         } else {
             drawEntrances(this.layers.above_floor, this.villageEntrances(index))
         }
@@ -167,6 +170,7 @@ export class PlayApp extends App {
         otherPlayer.setPosition(x, y)
         this.layers.object.addChild(otherPlayer.parent)
         this.players[uid] = otherPlayer
+        otherPlayer.setHat(villageStore.get().hats[uid] ?? null)
         this.sortObjectsByY()
     }
 
@@ -197,6 +201,7 @@ export class PlayApp extends App {
             this.player.setPosition(this.realmData.spawnpoint.x, this.realmData.spawnpoint.y)
         }
         this.layers.object.addChild(this.player.parent)
+        this.player.setHat(villageStore.get().hats[this.uid] ?? null)
         this.moveCameraToPlayer()
     }
 
@@ -397,7 +402,51 @@ export class PlayApp extends App {
         if (target) this.player.moveToTile(target.x, target.y)
     }
 
+    private onVillageHat = (h: { uid: string, hat: string | null }) => {
+        if (h.uid === this.uid) this.player.setHat(h.hat)
+        else this.players[h.uid]?.setHat(h.hat)
+    }
+
+    /** "+3 🌾" floating up from the local player. */
+    private onVillageFloat = (f: { text: string, color?: number }) => {
+        const t = new PIXI.Text({ text: f.text, style: { fontFamily: 'silkscreen', fontSize: 128, fill: f.color ?? 0xfff3d6, stroke: { color: 0x1f1913, width: 18 } } })
+        t.scale.set(0.09)
+        t.anchor.set(0.5, 1)
+        t.x = this.player.parent.x
+        t.y = this.player.parent.y - 44
+        t.zIndex = 100000
+        this.layers.object.addChild(t)
+        gsap.to(t, { y: t.y - 34, duration: 1.4, ease: 'power1.out' })
+        gsap.to(t, { alpha: 0, duration: 0.5, delay: 0.9, onComplete: () => t.destroy() })
+    }
+
+    /** The office finished a team project: its landmark appears on the map right away. */
+    private onVillageBuilt = async (b: BuiltLandmark) => {
+        if (b.sprite && b.roomIndex !== undefined && b.x !== undefined && b.y !== undefined) {
+            const key = `${b.x}, ${b.y}` as TilePoint
+            const room = this.realmData.rooms[b.roomIndex]
+            room.tilemap[key] = { ...(room.tilemap[key] ?? {}), object: b.sprite }
+            if (this.currentRoomIndex === b.roomIndex) {
+                await this.placeTileFromJson(b.x, b.y, 'object', b.sprite)
+                this.setUpBlockedTiles()
+                this.sortObjectsByY()
+            }
+        }
+        if (this.village) this.village.setBuildSite(b.nextSite && b.nextSite.roomIndex === this.currentRoomIndex ? b.nextSite : null, villageStore.get().state?.project ?? null)
+    }
+
+    private onVillageProject = (p: ProjectView) => this.village?.updateProject(p)
+
+    private onVillageBuildSite = (site: BuildSite | null) => {
+        if (this.village) this.village.setBuildSite(site && site.roomIndex === this.currentRoomIndex ? site : null, villageStore.get().state?.project ?? null)
+    }
+
     private setUpSignalListeners = () => {
+        signal.on('villageHat', this.onVillageHat)
+        signal.on('villageFloat', this.onVillageFloat)
+        signal.on('villageBuilt', this.onVillageBuilt)
+        signal.on('villageProject', this.onVillageProject)
+        signal.on('villageBuildSite', this.onVillageBuildSite)
         signal.on('villageSay', this.onVillageSay)
         signal.on('villageShops', this.onVillageShops)
         signal.on('villageWalk', this.onVillageWalk)
@@ -409,6 +458,11 @@ export class PlayApp extends App {
     }
 
     private removeSignalListeners = () => {
+        signal.off('villageHat', this.onVillageHat)
+        signal.off('villageFloat', this.onVillageFloat)
+        signal.off('villageBuilt', this.onVillageBuilt)
+        signal.off('villageProject', this.onVillageProject)
+        signal.off('villageBuildSite', this.onVillageBuildSite)
         signal.off('villageSay', this.onVillageSay)
         signal.off('villageShops', this.onVillageShops)
         signal.off('villageWalk', this.onVillageWalk)

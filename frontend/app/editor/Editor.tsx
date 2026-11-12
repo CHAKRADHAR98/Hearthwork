@@ -9,18 +9,22 @@ import { RealmData, Tool, TileMode, SpecialTile, Layer } from '@/utils/pixi/type
 import signal from '@/utils/signal'
 import { useModal } from '../hooks/useModal'
 import { SheetName } from '@/utils/pixi/spritesheet/spritesheet'
+import { editorLandmarks } from '@/utils/pixi/spritesheet/landmarks'
 
 type EditorProps = {
     realmData: RealmData
+    /** Team-project landmarks this office built (unlocked in the landmarks palette). */
+    landmarks?: string[]
 }
 
 export type TileWithPalette = {
     name: string
     palette: SheetName}
 
-const palettes: SheetName[] = ['ground', 'grasslands', 'village']
+const palettes: SheetName[] = ['ground', 'grasslands', 'village', 'landmarks']
 
-const Editor:React.FC<EditorProps> = ({ realmData }) => {
+const Editor:React.FC<EditorProps> = ({ realmData, landmarks = [] }) => {
+    editorLandmarks.unlocked = landmarks
     
     const [tool, setTool] = useState<Tool>('None')
     const [tileMode, setTileMode] = useState<TileMode>('Single')

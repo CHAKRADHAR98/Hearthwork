@@ -1,6 +1,7 @@
 // Small shared pieces for the village UI.
 import React, { useState } from 'react'
 import { GOOD_ICONS } from '@/utils/village/data'
+import { itemInfo } from '@/utils/village/client'
 
 export const panel = 'bg-[#1f1913]/95 border-2 border-[#b08a3e] rounded-xl text-[#f6ead2] shadow-[0_8px_40px_rgba(0,0,0,0.55)]'
 export const btn = 'px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
@@ -8,7 +9,7 @@ export const btnGold = `${btn} bg-[#c9a227] text-[#1f1913] hover:bg-[#e0b93a]`
 export const btnGhost = `${btn} bg-[#3a2f24] text-[#f6ead2] hover:bg-[#4a3d2f]`
 export const input = 'bg-[#2c241b] border border-[#5a4a36] rounded-lg px-2 py-1 text-sm text-[#f6ead2] outline-none focus:border-[#c9a227]'
 
-export const icon = (g: string) => GOOD_ICONS[g] ?? '📦'
+export const icon = (g: string) => GOOD_ICONS[g] ?? itemInfo(g).icon
 
 /** Hover/tap tooltip explaining why a price is what it is (reasons come from pricing.ts on the server). */
 export function Why({ reasons, label = 'why?' }: { reasons: string[]; label?: string }) {

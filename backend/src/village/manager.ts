@@ -11,7 +11,7 @@ import { SHOP_BY_ID, ShopId, SHOPS } from './shops'
 import { Deal, Village, VillageEvent } from './village'
 import { Wallets } from './wallets'
 import { EXTRA_TOKENS, HAT_BY_ID, HATS, ProjectInfo, PROJECTS, RARES, TOOLS } from './extras'
-import { placeLandmarks } from './marketRoom'
+import { buildSiteFor, placeLandmarks } from './marketRoom'
 import { sessionManager } from '../session'
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data')
@@ -89,9 +89,15 @@ class VillageManager {
     private onBuilt(realmId: string, p: ProjectInfo) {
         const session = sessionManager.getSession(realmId)
         if (!session) return
-        const placed = placeLandmarks(session.map_data, [p.id])
-        for (const pl of placed) this.io.to(this.room(realmId)).emit('village:built', { ...pl, name: p.name, icon: p.icon, reward: p.reward })
-        if (!placed.length) this.io.to(this.room(realmId)).emit('village:built', { id: p.id, name: p.name, icon: p.icon, reward: p.reward })
+        const placed = placeLandmarks(session.map_data, [p.id])[0]
+        this.io.to(this.room(realmId)).emit('village:built', { ...placed, id: p.id, name: p.name, icon: p.icon, reward: p.reward, nextSite: this.buildSite(realmId) })
+    }
+
+    /** Where the current team project will stand in this office's Market Square. */
+    buildSite(realmId: string) {
+        const p = this.running[realmId]?.village.currentProject()
+        const session = sessionManager.getSession(realmId)
+        return p && session ? buildSiteFor(session.map_data, p.id) : null
     }
 
     /** Hats worn by everyone currently in this office. */
@@ -227,6 +233,7 @@ class VillageManager {
                 fastForward: r.fastForwardLeft > 0,
                 catalog: { rares: RARES, tools: TOOLS, hats: HATS, projects: PROJECTS },
                 hats: this.hatsInRoom(realmId),
+                buildSite: this.buildSite(realmId),
             }
         })
 

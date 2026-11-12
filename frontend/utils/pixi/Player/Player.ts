@@ -118,6 +118,24 @@ export class Player {
         this.parent.addChild(text)
     }
 
+    private hatText: PIXI.Text | null = null
+
+    /** Draw a hat (emoji) on the character's head, or remove it with null. */
+    public setHat(hat: string | null) {
+        if (this.hatText) {
+            this.parent.removeChild(this.hatText)
+            this.hatText.destroy()
+            this.hatText = null
+        }
+        if (!hat) return
+        const t = new PIXI.Text({ text: hat, style: { fontSize: 128 } })
+        t.anchor.set(0.5, 1)
+        t.scale.set(0.12)
+        t.y = -25
+        this.parent.addChild(t)
+        this.hatText = t
+    }
+
     public setMessage(message: string) {
         if (this.textTimeout) {
             clearTimeout(this.textTimeout)

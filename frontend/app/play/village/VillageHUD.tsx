@@ -7,17 +7,25 @@ import { call, fmtHour, joinVillage, VillageEvent } from '@/utils/village/client
 import { useVillage } from './useVillage'
 import ShopPanel from './ShopPanel'
 import MarketBoard from './MarketBoard'
+import RequestsPanel from './RequestsPanel'
+import BagPanel from './BagPanel'
+import ProjectPanel from './ProjectPanel'
+import Celebrate from './Celebrate'
+import HowToPlay from './HowToPlay'
 import { btnGhost, icon, nearAccountUrl, panel } from './ui'
+import type { BuiltLandmark } from '@/utils/village/client'
 
-type Near = { kind: 'shop' | 'gather'; id: string; label: string; icon: string } | null
+type Near = { kind: 'shop' | 'gather' | 'build'; id: string; label: string; icon: string } | null
+type Side = 'requests' | 'bag' | 'build' | null
 
-const BIG_NEWS = ['bankrupt', 'reopen', 'pact', 'job', 'dividend']
+const BIG_NEWS = ['bankrupt', 'reopen', 'pact', 'job', 'dividend', 'rare', 'built', 'project']
 
 export default function VillageHUD() {
-    const { joined, state, wallet, fastForward, chain } = useVillage()
+    const { joined, state, wallet, fastForward, chain, goods: villageGoods } = useVillage()
     const [near, setNear] = useState<Near>(null)
     const [openShop, setOpenShop] = useState<string | null>(null)
     const [board, setBoard] = useState(false)
+    const [side, setSide] = useState<Side>(null)
     const [ticker, setTicker] = useState<VillageEvent | null>(null)
 
     // join once the office socket is connected
@@ -43,7 +51,14 @@ export default function VillageHUD() {
     const gather = useCallback(async (spot: string) => {
         try {
             const r: any = await call('village:gather', { spot })
-            toast.success(`Gathered ${r.text}`, { autoClose: 1500 })
+            const g = r.gathered
+            signal.emit('villageFloat', { text: `+${g.qty} ${icon(g.good)}${g.tool ? ` ${g.tool.icon}` : ''}` })
+            if (g.tool?.broke) toast.info(`${g.tool.icon} Your ${g.tool.name.toLowerCase()} broke! Tor sells new ones.`, { autoClose: 4000 })
+            if (g.collectionDone) {
+                signal.emit('celebrate', { icon: '👑', title: 'Collection complete!', text: `You found every rare item and earned the Collector's crown. Wear it from your 🎒 bag!`, big: true })
+            } else if (g.rare) {
+                signal.emit('celebrate', { icon: g.rare.icon, title: g.rare.isNew ? 'New rare find!' : 'Rare find!', text: `${g.rare.name}, worth ${g.rare.value} coins.${g.rare.isNew ? ' Added to your 📖 collection book.' : ''}` })
+            }
         } catch (e: any) {
             toast.info(e.message, { autoClose: 2000 })
         }
@@ -51,15 +66,20 @@ export default function VillageHUD() {
 
     const activate = useCallback((target: Near) => {
         if (!target) return
-        if (target.kind === 'shop') setOpenShop(target.id)
+        if (target.kind === 'shop') { setOpenShop(target.id); setSide(null) }
+        else if (target.kind === 'build') { setSide('build'); setOpenShop(null) }
         else gather(target.id)
     }, [gather])
 
     useEffect(() => {
         const onNear = (n: Near) => setNear(n)
-        const onOpen = (t: { kind: 'shop' | 'gather'; id: string }) => {
-            if (t.kind === 'shop') setOpenShop(t.id)
+        const onOpen = (t: { kind: 'shop' | 'gather' | 'build'; id: string }) => {
+            if (t.kind === 'shop') { setOpenShop(t.id); setSide(null) }
+            else if (t.kind === 'build') { setSide('build'); setOpenShop(null) }
             else gather(t.id)
+        }
+        const onBuilt = (b: BuiltLandmark) => {
+            signal.emit('celebrate', { icon: b.icon, title: `The ${b.name} is built!`, text: `${b.reward} Look for it in your Market Square.`, big: true })
         }
         const onEvent = (e: VillageEvent) => {
             if (!BIG_NEWS.includes(e.kind)) return
@@ -69,7 +89,9 @@ export default function VillageHUD() {
         signal.on('villageProximity', onNear)
         signal.on('villageOpen', onOpen)
         signal.on('villageEvent', onEvent)
+        signal.on('villageBuilt', onBuilt)
         return () => {
+            signal.off('villageBuilt', onBuilt)
             signal.off('villageProximity', onNear)
             signal.off('villageOpen', onOpen)
             signal.off('villageEvent', onEvent)
@@ -83,7 +105,11 @@ export default function VillageHUD() {
             if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
             if (e.key === 'e' || e.key === 'E') activate(near)
             if (e.key === 'm' || e.key === 'M') setBoard(b => !b)
-            if (e.key === 'Escape') { setOpenShop(null); setBoard(false) }
+            const toggle = (s: Side) => { setOpenShop(null); setSide(cur => (cur === s ? null : s)) }
+            if (e.key === 'r' || e.key === 'R') toggle('requests')
+            if (e.key === 'b' || e.key === 'B') toggle('bag')
+            if (e.key === 't' || e.key === 'T') toggle('build')
+            if (e.key === 'Escape') { setOpenShop(null); setBoard(false); setSide(null) }
         }
         document.addEventListener('keydown', onKey)
         return () => document.removeEventListener('keydown', onKey)
@@ -95,7 +121,11 @@ export default function VillageHUD() {
     }, [near, openShop])
 
     if (!joined || !state || !wallet) return null
-    const goods = Object.entries(wallet.balances).filter(([g, n]) => g !== 'coin' && n > 0)
+    const goods = Object.entries(wallet.balances).filter(([g, n]) => g !== 'coin' && n > 0 && g in (villageGoods ?? {}))
+    const ready = state.jobs.filter(j => (wallet.balances[j.good] ?? 0) >= j.qty).length
+    const open = (s: Side) => { setOpenShop(null); setSide(cur => (cur === s ? null : s)) }
+    const proj = state.project?.current
+    const projPct = proj ? Math.floor((Object.entries(proj.needs).reduce((a, [k, n]) => a + Math.min(n, proj.given[k] ?? 0), 0) / Object.values(proj.needs).reduce((a, b) => a + b, 0)) * 100) : 100
 
     async function fastForwardWeek() {
         try {
@@ -123,6 +153,14 @@ export default function VillageHUD() {
                     {chain.enabled ? '⛓️' : '⚠️ off-chain'} {wallet.accountId}
                 </a>
                 <div className='flex gap-1.5 flex-wrap'>
+                    <button className={`${btnGhost} relative`} onClick={() => open('requests')}>
+                        📜 Requests <kbd className='text-[10px] opacity-60'>R</kbd>
+                        {state.jobs.length > 0 && <span className={`absolute -top-1.5 -right-1.5 rounded-full text-[10px] px-1.5 font-bold ${ready ? 'bg-[#7fb069] text-[#1f1913] animate-pulse' : 'bg-[#c9a227] text-[#1f1913]'}`}>{ready || state.jobs.length}</span>}
+                    </button>
+                    <button className={btnGhost} onClick={() => open('bag')}>🎒 Bag <kbd className='text-[10px] opacity-60'>B</kbd></button>
+                    <button className={btnGhost} onClick={() => open('build')} title={proj ? `${proj.name}: ${projPct}% built` : 'All built'}>🏗️ {proj ? `${projPct}%` : 'Built'} <kbd className='text-[10px] opacity-60'>T</kbd></button>
+                </div>
+                <div className='flex gap-1.5 flex-wrap'>
                     <button className={btnGhost} onClick={() => signal.emit('villageWalk')}>🚶 Market</button>
                     <button className={btnGhost} onClick={() => setBoard(true)}>📈 Board <kbd className='text-[10px] opacity-60'>M</kbd></button>
                     <button className={btnGhost} disabled={fastForward} onClick={fastForwardWeek}>⏩ 1 week</button>
@@ -142,11 +180,16 @@ export default function VillageHUD() {
             {near && !openShop && (
                 <button onClick={() => activate(near)} className={`${panel} absolute left-1/2 -translate-x-1/2 bottom-20 z-30 px-4 py-2 text-sm hover:border-[#e0b93a]`}>
                     <kbd className='bg-[#c9a227] text-[#1f1913] rounded px-1.5 mr-2 font-bold'>E</kbd>
-                    {near.kind === 'shop' ? `Talk to ${near.label}` : `${near.icon} Gather at the ${near.label.toLowerCase()}`}
+                    {near.kind === 'shop' ? `Talk to ${near.label}` : near.kind === 'build' ? '🏗️ Help build' : `${near.icon} Gather at the ${near.label.toLowerCase()}`}
                 </button>
             )}
 
             {openShop && <ShopPanel shopId={openShop} onClose={() => setOpenShop(null)} />}
+            {!openShop && side === 'requests' && <RequestsPanel onClose={() => setSide(null)} />}
+            {!openShop && side === 'bag' && <BagPanel onClose={() => setSide(null)} />}
+            {!openShop && side === 'build' && <ProjectPanel onClose={() => setSide(null)} />}
+            <Celebrate />
+            <HowToPlay />
             {board && <MarketBoard onClose={() => setBoard(false)} />}
         </>
     )

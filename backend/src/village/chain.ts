@@ -53,6 +53,9 @@ class Chain {
     private queue: Promise<unknown> = Promise.resolve()
     private created = new Set<string>()
     private listeners: ((tx: ChainTx) => void)[] = []
+    /** Item types the contract doesn't know yet: their balance changes wait until registration succeeds. */
+    unregistered = new Map<string, { id: string; name: string; icon: string }>()
+    private lastRegisterTry = 0
 
     init() {
         const key = loadKey()
@@ -183,6 +186,8 @@ class Chain {
      */
     registerTokens(list: { id: string; name: string; icon: string }[]) {
         if (!this.enabled) return Promise.resolve()
+        for (const t of list) this.unregistered.set(t.id, t)
+        this.lastRegisterTry = Date.now()
         return this.enqueue(async () => {
             let known: (unknown | null)[]
             try {
@@ -192,15 +197,21 @@ class Chain {
                 return
             }
             for (const [i, t] of list.entries()) {
-                if (known[i]) continue
+                if (known[i]) { this.unregistered.delete(t.id); continue }
                 try {
                     const res: any = await this.account!.callFunctionRaw({
                         contractId: ITEMS_CONTRACT, methodName: 'register_token',
                         args: { token_id: t.id, name: t.name, symbol: t.id.toUpperCase().slice(0, 12), icon: t.icon }, gas: 30n * TGAS,
                     })
-                    this.record('register_token', `New item type on chain: ${t.icon} ${t.name}`, res, !res?.status?.Failure)
+                    const ok = !res?.status?.Failure
+                    this.record('register_token', `New item type on chain: ${t.icon} ${t.name}`, res, ok)
+                    if (ok) this.unregistered.delete(t.id)
                 } catch (e: any) {
-                    console.error('[near] register_token failed', t.id, e?.message)
+                    console.error('[near] register_token failed', t.id, String(e?.message).slice(0, 160))
+                    if (String(e?.message).includes('lacks balance')) {
+                        console.error(`[near] ${ITEMS_CONTRACT} needs more NEAR for storage. Send it ~3 NEAR; registration retries automatically.`)
+                        break
+                    }
                 }
             }
         })
@@ -229,8 +240,11 @@ class Chain {
     /** Push every balance change since the last sync in batched apply_deltas calls. */
     settle(wallets: Wallets, memo: string) {
         if (!this.enabled) return Promise.resolve()
+        // retry registering new item types every minute until it works (e.g. after the contract is topped up)
+        if (this.unregistered.size && Date.now() - this.lastRegisterTry > 60_000) this.registerTokens([...this.unregistered.values()])
         return this.enqueue(async () => {
-            const deltas = wallets.pendingDeltas()
+            // changes to item types the contract doesn't know yet stay pending (the game keeps working off-chain for them)
+            const deltas = wallets.pendingDeltas().filter(d => !this.unregistered.has(d.token))
             if (!deltas.length) return
             for (let i = 0; i < deltas.length; i += 40) {
                 const batch = deltas.slice(i, i + 40)

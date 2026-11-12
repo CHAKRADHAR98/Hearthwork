@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { call } from '@/utils/village/client'
+import signal from '@/utils/signal'
 import { VILLAGE_NPCS } from '@/utils/village/data'
 import AnimatedCharacter from '../SkinMenu/AnimatedCharacter'
 import { useVillage } from './useVillage'
@@ -13,7 +14,7 @@ type ChatLine = { from: 'you' | 'shop'; text: string; offer?: { unit: number; to
 const chats: Record<string, ChatLine[]> = {} // survives closing the panel
 
 export default function ShopPanel({ shopId, onClose }: { shopId: string; onClose: () => void }) {
-    const { state, wallet, goods, ai } = useVillage()
+    const { state, wallet, goods, ai, catalog } = useVillage()
     const shop = state?.shops.find(s => s.id === shopId)
     const npc = VILLAGE_NPCS.find(n => n.id === shopId)!
     const [qty, setQty] = useState<Record<string, number>>({})
@@ -59,7 +60,20 @@ export default function ShopPanel({ shopId, onClose }: { shopId: string; onClose
     const buy = (g: string, n: number, dealId?: string) =>
         run(() => call('village:buy', { shopId, good: g, qty: n, dealId }), (r: any) => `Bought ${n} ${icon(g)} for ${r.trade.total} 🪙`)
     const sell = (g: string, n: number, dealId?: string) =>
-        run(() => call('village:sell', { shopId, good: g, qty: n, dealId }), (r: any) => `Sold ${n} ${icon(g)} for ${r.trade.total} 🪙`)
+        run(() => call('village:sell', { shopId, good: g, qty: n, dealId }), (r: any) => {
+            signal.emit('villageFloat', { text: `+${r.trade.total + (r.trade.bonus ?? 0)} coins`, color: 0xe0b93a })
+            return `Sold ${n} ${icon(g)} for ${r.trade.total} 🪙${r.trade.bonus ? ` (+${r.trade.bonus} 🌉 bridge bonus)` : ''}`
+        })
+    const buyItem = (id: string, label: string) =>
+        run(() => call('village:buyItem', { item: id }), () => `Bought ${label}!`)
+    const sellRare = (id: string, label: string) =>
+        run(() => call('village:sellRare', { rare: id }), (r: any) => {
+            signal.emit('villageFloat', { text: `+${r.value} coins`, color: 0xe0b93a })
+            return `Sold ${label} for ${r.value} 🪙`
+        })
+    const tools = shopId === 'smith' ? catalog.tools : []
+    const hats = shopId === 'tailor' ? catalog.hats.filter(h => h.price) : []
+    const rares = catalog.rares.filter(r => r.buyer === shopId)
 
     async function sendHaggle(e: React.FormEvent) {
         e.preventDefault()
@@ -131,6 +145,50 @@ export default function ShopPanel({ shopId, onClose }: { shopId: string; onClose
                             ))}
                         </section>
 
+                        {tools.length > 0 && (
+                            <section className='rounded-lg border border-[#b08a3e] bg-[#2a2119] p-2'>
+                                <h3 className='font-bold'>🛠️ Tools <span className='text-xs font-normal text-[#cdb88f]'>gather double at one spot · {shop.stock.tools ?? 0} 🔨 in stock to make them</span></h3>
+                                {tools.map(t => (
+                                    <div key={t.id} className='flex items-center gap-2 py-1'>
+                                        <span className='flex-1'>{t.icon} {t.name} <span className='text-xs text-[#cdb88f]'>· {t.uses} uses{bal(t.id) ? ` · you have ${bal(t.id)}` : ''}</span></span>
+                                        <span className='tabular-nums'>{t.price} 🪙</span>
+                                        <button className={btnGold} disabled={busy || bal('coin') < t.price || (shop.stock.tools ?? 0) < 1} onClick={() => buyItem(t.id, `${t.icon} ${t.name}`)}>Buy</button>
+                                    </div>
+                                ))}
+                            </section>
+                        )}
+                        {hats.length > 0 && (
+                            <section className='rounded-lg border border-[#b08a3e] bg-[#2a2119] p-2'>
+                                <h3 className='font-bold'>🎩 Hats <span className='text-xs font-normal text-[#cdb88f]'>worn in the office too · {shop.stock.cloth ?? 0} 🧵 in stock to sew them</span></h3>
+                                <div className='grid grid-cols-4 gap-2 mt-1'>
+                                    {hats.map(h => {
+                                        const owned = bal(h.id) > 0
+                                        return (
+                                            <button key={h.id} disabled={busy || owned || bal('coin') < (h.price ?? 0) || (shop.stock.cloth ?? 0) < 1}
+                                                onClick={() => buyItem(h.id, `${h.icon} ${h.name}`)}
+                                                className='rounded-lg border border-[#5a4a36] p-1.5 text-center hover:border-[#e0b93a] disabled:opacity-50 disabled:cursor-not-allowed'>
+                                                <div className='text-2xl'>{h.icon}</div>
+                                                <div className='text-[10px] leading-tight'>{h.name}</div>
+                                                <div className='text-[11px] font-bold'>{owned ? 'owned' : `${h.price} 🪙`}</div>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </section>
+                        )}
+                        {rares.length > 0 && (
+                            <section>
+                                <h3 className='font-bold mb-1'>✨ Rare finds {shop.name} can sell to a collector</h3>
+                                {rares.map(r => (
+                                    <div key={r.id} className='flex items-center gap-2 py-1'>
+                                        <span className='flex-1'>{r.icon} {r.name} <span className='text-xs text-[#cdb88f]'>· you have {bal(r.id)}</span></span>
+                                        <span className='tabular-nums'>{r.value} 🪙</span>
+                                        <button className={btnGold} disabled={busy || bal(r.id) < 1} onClick={() => sellRare(r.id, `${r.icon} ${r.name}`)}>Sell</button>
+                                    </div>
+                                ))}
+                            </section>
+                        )}
+
                         <section className='rounded-lg border border-[#5a4a36] p-2 flex flex-col gap-2'>
                             <h3 className='font-bold'>💬 Haggle <span className='text-xs font-normal text-[#cdb88f]'>{ai ? '· AI shopkeeper on NEAR AI' : '· rule-based shopkeeper'}</span></h3>
                             <div className='flex flex-wrap items-center gap-2'>
@@ -171,10 +229,10 @@ export default function ShopPanel({ shopId, onClose }: { shopId: string; onClose
 
                 {jobs.length > 0 && (
                     <section>
-                        <h3 className='font-bold mb-1'>📜 Help wanted</h3>
+                        <h3 className='font-bold mb-1'>📜 {shop.name}&apos;s requests</h3>
                         {jobs.map(j => (
                             <div key={j.id} className='flex items-center gap-2 py-1'>
-                                <span className='flex-1'>Deliver {j.qty} {icon(j.good)} {name(j.good)} → <b>{j.reward} 🪙</b> <span className='text-xs text-[#cdb88f]'>(you have {bal(j.good)})</span></span>
+                                <span className='flex-1'>{j.size === 'urgent' ? '⏰ ' : ''}Deliver {j.qty} {icon(j.good)} {name(j.good)} → <b>{j.reward} 🪙</b> <span className='text-xs text-[#cdb88f]'>{j.note ? `${j.note} · ` : ''}you have {bal(j.good)}</span></span>
                                 <button className={btnGold} disabled={busy || bal(j.good) < j.qty} onClick={() => run(() => call('village:deliverJob', { jobId: j.id }), () => `Job done! +${j.reward} 🪙`)}>Deliver</button>
                             </div>
                         ))}

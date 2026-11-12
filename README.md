@@ -17,7 +17,12 @@ Built for **NEAR Hackathon 2026**. Tracks: **Games With Real Economies** (main) 
 
 | Every 30 seconds | Every few minutes | Every session |
 |---|---|---|
-| Gather wheat, iron, fish or wool at the field, mine, dock and pasture | Sell to the shopkeeper who pays most, buy what you need, haggle in chat, take delivery jobs | Invest in shops (and rescue bankrupt ones) for a share of their profit, bet on office predictions, chip into the team pool |
+| Gather wheat, iron, fish or wool at the field, mine, dock and pasture, and sometimes find something rare | Sell to the shopkeeper who pays most, haggle in chat, fill shopkeeper requests, buy a better tool or a hat | Build landmarks with your whole office, fill the collection book, invest in shops, bet on office predictions, chip into the team pool |
+
+- **📜 Requests board.** Shopkeepers post small, big and ⏰ urgent requests ("Mira needs 6 fish for a fish pie at the mayor's dinner, pays 72"). Some come from real shortages in their shop, others are townsfolk orders. Deliver from anywhere in the square (**R**).
+- **✨ Rare finds and a collection book.** Each gathering spot hides two rare items (gem, pearl, golden fleece…). A **lucky streak** makes every empty gather raise the odds of the next find, so nobody waits forever. Find all 8 to earn the 👑 Collector's crown (**B**).
+- **🛠️ Tools and 🎩 hats.** Tor sells tools that double what you gather at one spot and wear out after 25 uses. Ivo sells hats that your character wears, in the Market Square and in the office. Making either uses up the shop's own tools or cloth, so players become real customers of the economy.
+- **🏗️ Team builds.** The whole office donates goods and coins to build a landmark: 🌉 Old Bridge → ⛲ Golden Fountain → 🪣 Wishing Well. Each one gives a permanent village bonus and **appears on that office's map**. It shows up live in its Market Square, and the owner can move it anywhere with the editor's 🏆 landmarks palette. Other offices see it locked, and the server removes locked landmarks from any map that is saved (**T**).
 
 - **Shopkeepers with wallets.** Bram (farmer), Mira (baker), Tor (blacksmith), Nell (fishmonger) and Ivo (tailor) each own a NEAR account (`baker-<office>.hearthwork.testnet`, …). Their coins and goods are NEP-245 balances you can look up on the explorer.
 - **Real supply and demand.** Prices react to stock, recent sales and the shopkeeper's cash. Flood the smith with iron and iron gets cheap. **All pricing rules live in one readable file: [`backend/src/village/pricing.ts`](backend/src/village/pricing.ts).** Hover **why?** next to any price to see the shopkeeper's reasoning.
@@ -35,6 +40,7 @@ Built for **NEAR Hackathon 2026**. Tracks: **Games With Real Economies** (main) 
 | **NEP-245 multi-token contract**: every good plus `coin`, atomic goods-for-coin `trade`, `craft`, batched `apply_deltas` settlement, NEP-297 events | [`contracts/village_items`](contracts/village_items) → `items.hearthwork.testnet` |
 | **Prediction markets** (LMSR, fees, resolve, claim) | [`contracts/prediction_market`](contracts/prediction_market) → `market.hearthwork.testnet` |
 | **Team pool** (per-office NEAR pool, 10 NEAR per day withdraw cap) | [`contracts/team_pool`](contracts/team_pool) → `pool.hearthwork.testnet` |
+| **Items as tokens**: tools, hats and rare finds are NEP-245 token types too, registered on the contract by the game at startup | `chain.registerTokens`, [`backend/src/village/extras.ts`](backend/src/village/extras.ts) |
 | **Agent wallets**: every shopkeeper and every player gets a real NEAR sub-account | [`backend/src/village/chain.ts`](backend/src/village/chain.ts) `ensureAccount` |
 | **Gasless play** (NEP-366 meta transactions: the player's wallet signs, the server relays and pays gas) | `chain.callAs` |
 | **NEAR AI Cloud** (OpenAI-compatible) for shopkeeper dialogue and gossip | [`backend/src/village/agents.ts`](backend/src/village/agents.ts) |
@@ -81,6 +87,10 @@ Optional: set `NEARAI_API_KEY` (AI shopkeepers) and `GOOGLE_CLIENT_ID` (Google s
 8. Sell lots of one good in a single day. → A toast says the shopkeepers "agree to lowball" you. The shop panel warns you, and the offered price drops 25%.
 9. Click **🎯 Predictions**, ask a question and set it to "closes in 6 min", then **Buy YES**. → Two meta transactions from *your* wallet, deposit then buy, with the gas paid by Hearthwork. After the deadline the asker resolves it and winners **Claim**.
 10. Click **🏦 Team pool** and **Deposit** 0.01 NEAR. → The pool balance is read from `pool.hearthwork.testnet`.
+11. Press **R**. → The **📜 Requests board** lists what shopkeepers need, why, the reward and the time left. Gather what one asks for and click **Deliver**. → Coins float up and the shopkeeper thanks you in a speech bubble.
+12. Keep gathering. → Every so often a **✨ rare find** pops up (the chance grows with each empty gather). Press **B** to see it in your **📖 collection book**, and sell spares in the shop of the shopkeeper who collects them.
+13. Open **Tor**'s shop and buy a **⛏️ Pickaxe**, then gather at the mine. → Twice the iron, and the tool's wear bar in your bag goes down. Open **Ivo**'s shop and buy a **👒 Straw hat**. → Your character wears it, and teammates see it in the office too.
+14. Press **T** (or walk to the roped-off **🏗️ building site**) and give goods to the **🌉 Old Bridge**. Invite a teammate to help. → When it is complete, everyone in the office sees a celebration and the bridge **appears on your Market Square map**. In **Editor → Tiles → Landmarks** the bridge is now unlocked for this office only, and the fountain and well show 🔒.
 
 ## Tests
 
@@ -90,6 +100,7 @@ cd contracts/prediction_market && cargo test    # 37 tests: LMSR buy/sell, fees,
 cd contracts/team_pool && cargo test            # 21 tests: deposits, daily cap, window reset, failed-transfer rollback
 cd backend && npm run sim -- 14                 # headless economy: 14 days, prices, cash, bankruptcies
 cd backend && npm run sim -- 7 --flood          # a player floods iron → watch the price pact form and break
+cd backend && npm run check:features            # requests, rare finds + lucky streak, tools, hats, team build, landmarks on this office's map only
 cd backend && npx tsx scripts/smoke.ts          # end-to-end against a running backend: gather, sell, haggle, invest, fast-forward
 cd backend && npx tsx scripts/finance-smoke.ts  # markets + pool on testnet: create, buy, sell, resolve, claim, deposit, withdraw
 ```
@@ -103,19 +114,21 @@ contracts/team_pool/            per-office NEAR pool (Rust)
 backend/src/village/pricing.ts  ← every price rule, in one file
 backend/src/village/village.ts  economy simulation (one tick = one game hour)
 backend/src/village/shops.ts    the five shopkeepers: personalities, recipes, targets
+backend/src/village/extras.ts   rare finds, tools, hats, team projects and request sizes (all tunable data)
 backend/src/village/agents.ts   NEAR AI haggling within pricing limits
 backend/src/village/chain.ts    NEAR bridge: wallets, trades, settlement, meta transactions
 backend/src/village/manager.ts  per-office villages, persistence, socket API
 backend/src/village/marketRoom.ts  generates the Market Square room and wires entrance tiles to it
 backend/src/finance/finance.ts  prediction markets + team pool API
 frontend/utils/pixi/village/    Market Square inside the Pixi.js office world
-frontend/app/play/village/      HUD, shop panel, market board
+frontend/app/play/village/      HUD, shop panel, market board, requests, bag, team build
+frontend/scripts/make-landmarks.py  generates the landmark sprites (bridge drawn; fountain and well recast from the village sheet)
 frontend/app/play/finance/      predictions + team pool panels
 ```
 
 ## Built during the hackathon vs. before
 
-The repository's first commit ([`863fbf1`](../../commit/863fbf1), tag `pre-hackathon`) imports the office engine from an earlier project of mine: tile world, avatars, proximity video, map editor and the Express/Socket.io backend. It also contained Solana programs, which were **removed and replaced by NEAR**. **Everything after that commit was built during NEAR Hackathon 2026**: the three NEAR contracts, the village economy and AI shopkeepers, the Market Square, the NEAR prediction markets and team pool, gasless meta transactions, and Google sign-in.
+The repository's first commit ([`863fbf1`](../../commit/863fbf1), tag `pre-hackathon`) imports the office engine from an earlier project of mine: tile world, avatars, proximity video, map editor and the Express/Socket.io backend. It also contained Solana programs, which were **removed and replaced by NEAR**. **Everything after that commit was built during NEAR Hackathon 2026**: the three NEAR contracts, the village economy and AI shopkeepers, the Market Square (requests, rare finds, tools, hats and team-built landmarks), the NEAR prediction markets and team pool, gasless meta transactions, and Google sign-in.
 Full diff: [`pre-hackathon...main`](../../compare/pre-hackathon...main).
 
 Libraries: near-sdk (Rust), near-api-js, google-auth-library, Next.js, Pixi.js, Socket.io, Express, PostgreSQL, Tailwind.

@@ -6,6 +6,7 @@ import { Player } from '../Player/Player'
 import type { PlayApp } from '../PlayApp'
 import signal from '@/utils/signal'
 import { TilePoint } from '../types'
+import type { BuildSite, ProjectView } from '../../village/client'
 
 import { LAYOUT, NpcInfo, VillageSpot } from '../../village/layout'
 export { LAYOUT } from '../../village/layout'
@@ -26,6 +27,9 @@ export class VillageLayer {
     private signs: Record<string, PIXI.Text> = {}
     private interval: ReturnType<typeof setInterval> | null = null
     private current: string | null = null
+    private site: BuildSite | null = null
+    private siteGfx: PIXI.Container | null = null
+    private siteLabel: PIXI.Text | null = null
 
     constructor(private app: PlayApp, private floor: PIXI.Container, private objects: PIXI.Container) {}
 
@@ -148,6 +152,49 @@ export class VillageLayer {
         }
     }
 
+    /** The team project's building site: a roped-off plot with a sign showing progress. */
+    setBuildSite(site: BuildSite | null, project: ProjectView | null) {
+        this.siteGfx?.destroy({ children: true })
+        this.siteGfx = null
+        this.siteLabel = null
+        this.site = site
+        if (!site || !project?.current) return
+        const c = new PIXI.Container()
+        const left = site.x * 32, top = (site.y - site.h + 1) * 32, w = site.w * 32, h = site.h * 32
+        const g = new PIXI.Graphics()
+        g.rect(left + 2, top + 2, w - 4, h - 4).fill({ color: 0x8a6a3c, alpha: 0.25 })
+        // rope and posts around the plot
+        g.rect(left + 2, top + 2, w - 4, h - 4).stroke({ color: 0xe0b93a, width: 2, alpha: 0.9 })
+        for (const [px, py] of [[left + 2, top + 2], [left + w - 2, top + 2], [left + 2, top + h - 2], [left + w - 2, top + h - 2]]) {
+            g.rect(px - 3, py - 6, 6, 9).fill(0x6b4423)
+        }
+        // a few planks and stones waiting to be used
+        g.rect(left + 10, top + h - 18, 22, 5).fill(0xb4804a).rect(left + 12, top + h - 12, 22, 5).fill(0x96623a)
+        g.circle(left + w - 18, top + h - 14, 5).fill(0x9a948a).circle(left + w - 26, top + h - 11, 4).fill(0x8a847a)
+        g.eventMode = 'static'
+        g.cursor = 'pointer'
+        g.on('pointerdown', e => { e.stopPropagation(); this.app.player.moveToTile(site.x + Math.floor(site.w / 2), site.y + 1); signal.emit('villageOpen', { kind: 'build', id: 'project' }) })
+        const icon = new PIXI.Text({ text: '🏗️', style: { fontSize: 128 } })
+        icon.scale.set(0.22)
+        icon.anchor.set(0.5)
+        icon.x = left + w / 2
+        icon.y = top + h / 2
+        c.addChild(g, icon)
+        this.container.addChild(c)
+        this.siteGfx = c
+        this.siteLabel = this.addLabel('', left + w / 2, top - 2)
+        c.addChild(this.siteLabel)
+        this.updateProject(project)
+    }
+
+    updateProject(project: ProjectView | null) {
+        const p = project?.current
+        if (!this.siteLabel || !p) return
+        const need = Object.values(p.needs).reduce((a, b) => a + b, 0)
+        const got = Object.entries(p.needs).reduce((a, [k, n]) => a + Math.min(n, p.given[k] ?? 0), 0)
+        this.siteLabel.text = `${p.icon} ${p.name} · ${Math.floor((got / need) * 100)}%`
+    }
+
     say(shopId: string, text: string) {
         this.npcs[shopId]?.setMessage(text)
     }
@@ -163,10 +210,15 @@ export class VillageLayer {
             const dy = p.y - sy
             if (dx <= 1 && dy >= -1 && dy <= (s.kind === 'shop' ? 2 : 1)) { found = s; break }
         }
-        const key = found ? `${found.kind}:${found.id}` : null
+        let near: { kind: string; id: string; label: string; icon: string } | null = found ? { kind: found.kind, id: found.id, label: found.label, icon: found.icon } : null
+        const s = this.site
+        if (!near && s && this.siteGfx && p.x >= s.x - 1 && p.x <= s.x + s.w && p.y >= s.y - s.h && p.y <= s.y + 1) {
+            near = { kind: 'build', id: 'project', label: 'building site', icon: '🏗️' }
+        }
+        const key = near ? `${near.kind}:${near.id}` : null
         if (key !== this.current) {
             this.current = key
-            signal.emit('villageProximity', found ? { kind: found.kind, id: found.id, label: found.label, icon: found.icon } : null)
+            signal.emit('villageProximity', near)
         }
     }
 

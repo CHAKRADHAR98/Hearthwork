@@ -74,7 +74,7 @@ export class App {
         await this.loadRoomFromData(room)
     }
 
-    private placeTileFromJson = async (x: number, y: number, layer: Layer, tileName: string) => {
+    protected placeTileFromJson = async (x: number, y: number, layer: Layer, tileName: string) => {
         const screenCoordinates = this.convertTileToScreenCoordinates(x, y)
         const { sprite, data } = await sprites.getSpriteForTileJSON(tileName)
         sprite.position.set(screenCoordinates.x, screenCoordinates.y)

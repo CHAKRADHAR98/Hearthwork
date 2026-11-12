@@ -141,6 +141,15 @@ export function placeLandmarks(data: RealmData, built: string[]) {
     return placed
 }
 
+/** Where the landmark of project `id` will appear (shown as a building site until it is finished). */
+export function buildSiteFor(data: RealmData, id: string) {
+    const lm = LANDMARKS[id]
+    const roomIndex = data.rooms.findIndex(isMarketRoom)
+    if (!lm || roomIndex === -1) return null
+    const site = findSite(data.rooms[roomIndex], lm.w, lm.h, lm.site)
+    return site && { roomIndex, x: site.x, y: site.y, w: lm.w, h: lm.h }
+}
+
 /** Remove landmarks this office hasn't built (the editor can't be used to sneak one in). */
 export function stripLockedLandmarks(map: RealmData, built: string[]) {
     const allowed = new Set(built.map(id => LANDMARKS[id]?.sprite).filter(Boolean))
