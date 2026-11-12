@@ -6,6 +6,8 @@ import { server } from '../backend/server'
 import { defaultSkin } from './Player/skins'
 import signal from '../signal'
 import { gsap } from 'gsap'
+import { VillageLayer } from './village/VillageLayer'
+import { VILLAGE_NPCS } from '../village/data'
 
 export class PlayApp extends App {
     private scale: number = 1.5
@@ -27,6 +29,7 @@ export class PlayApp extends App {
     private fadeAnimation: gsap.core.Tween | null = null
     private currentPrivateAreaTiles: TilePoint[] = []
     public proximityId: string | null = null
+    public village: VillageLayer | null = null
 
     constructor(uid: string, realmId: string, realmData: RealmData, username: string, skin: string = defaultSkin) {
         super(realmData)
@@ -37,10 +40,17 @@ export class PlayApp extends App {
 
     override async loadRoom(index: number) {
         this.players = {}
+        this.village?.destroy()
+        this.village = null
         await super.loadRoom(index)
         this.setUpBlockedTiles()
         this.setUpFadeTiles()
         this.spawnLocalPlayer()
+        if (index === this.realmData.spawnpoint.roomIndex) {
+            // The Market Square lives in the office's main room.
+            this.village = new VillageLayer(this, this.layers.above_floor, this.layers.object)
+            await this.village.mount(VILLAGE_NPCS, this.realmData.spawnpoint)
+        }
         await this.syncOtherPlayers()
         this.displayInitialChatMessage()
     }
@@ -360,7 +370,14 @@ export class PlayApp extends App {
         })
     }
 
+    private onVillageSay = (m: { shopId: string, text: string }) => this.village?.say(m.shopId, m.text)
+    private onVillageShops = (shops: { id: string, open: boolean }[]) => this.village?.updateShops(VILLAGE_NPCS.map(n => ({ ...n, open: shops.find(s => s.id === n.id)?.open ?? true })))
+    private onVillageWalk = () => this.village?.walkHere()
+
     private setUpSignalListeners = () => {
+        signal.on('villageSay', this.onVillageSay)
+        signal.on('villageShops', this.onVillageShops)
+        signal.on('villageWalk', this.onVillageWalk)
         signal.on('requestSkin', this.onRequestSkin)
         signal.on('switchSkin', this.onSwitchSkin)
         signal.on('disableInput', this.onDisableInput)
@@ -369,6 +386,9 @@ export class PlayApp extends App {
     }
 
     private removeSignalListeners = () => {
+        signal.off('villageSay', this.onVillageSay)
+        signal.off('villageShops', this.onVillageShops)
+        signal.off('villageWalk', this.onVillageWalk)
         signal.off('requestSkin', this.onRequestSkin)
         signal.off('switchSkin', this.onSwitchSkin)
         signal.off('disableInput', this.onDisableInput)
@@ -478,6 +498,7 @@ export class PlayApp extends App {
     }
 
     public destroy() {
+        this.village?.destroy()
         this.removeEvents()
         super.destroy()
     }

@@ -13,6 +13,7 @@ const AgoraVideoChatProvider = dynamic(
     { ssr: false }
 )
 const IntroScreen = dynamic(() => import('./IntroScreen'), { ssr: false })
+const VillageHUD = dynamic(() => import('./village/VillageHUD'), { ssr: false })
 import { useModal } from '../hooks/useModal'
 import signal from '@/utils/signal'
 import SolPoolPanel from './SolPoolPanel'
@@ -93,6 +94,7 @@ const PlayClient:React.FC<PlayClientProps> = ({ mapData, username, access_token,
                     initialSkin={skin}
                 />
                 <PlayNavbar username={username} skin={skin}/>
+                <VillageHUD />
 
                 {/* Sol Pool Panel */}
                 {showSolPool && (
