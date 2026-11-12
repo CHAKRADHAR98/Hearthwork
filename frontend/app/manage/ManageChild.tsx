@@ -71,7 +71,7 @@ const ManageChild:React.FC<ManageChildProps> = ({ realmId, startingShareId, star
     }
 
     function copyLink() {
-        const link = process.env.NEXT_PUBLIC_BASE_URL + '/play/' + realmId + '?shareId=' + shareId
+        const link = window.location.origin + '/play/' + realmId + '?shareId=' + shareId
         navigator.clipboard.writeText(link)
         toast.success('Link copied!')
     }
@@ -107,7 +107,7 @@ const ManageChild:React.FC<ManageChildProps> = ({ realmId, startingShareId, star
                 toast.error(error.message || 'Failed to generate new link')
             } else {
                 setShareId(newShareId)
-                const link = process.env.NEXT_PUBLIC_BASE_URL + '/play/' + realmId + '?shareId=' + newShareId
+                const link = window.location.origin + '/play/' + realmId + '?shareId=' + newShareId
                 navigator.clipboard.writeText(link)
                 toast.success('New link copied!')
             }
