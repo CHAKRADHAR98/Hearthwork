@@ -6,9 +6,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node ./dist/index.js",
-    "dev": "npx ts-node ./src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "heroku-postbuild": "npm run build"
+    "heroku-postbuild": "npm run build",
+    "sim": "tsx src/village/sim.ts"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +22,7 @@
     "@types/node": "^20.12.7",
     "@types/pg": "^8.11.10",
     "@types/uuid": "^10.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.4.5"
   },
   "dependencies": {
