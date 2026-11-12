@@ -5,7 +5,7 @@ import path from 'path'
 import { Server, Socket } from 'socket.io'
 import { z } from 'zod'
 import { aiEnabled, gossip, haggle } from './agents'
-import { chain, ITEMS_CONTRACT, MARKET_CONTRACT, POOL_CONTRACT } from './chain'
+import { chain, ITEMS_CONTRACT, MARKET_CONTRACT, parseNear, POOL_CONTRACT } from './chain'
 import { COIN, GATHER_SPOTS, GOODS, GOOD_IDS, GoodId } from './goods'
 import { SHOP_BY_ID, ShopId, SHOPS } from './shops'
 import { Deal, Village, VillageEvent } from './village'
@@ -16,6 +16,8 @@ const HOUR_MS = Number(process.env.VILLAGE_HOUR_MS || 2500) // one game hour; a 
 const FAST_HOUR_MS = 350 // fast-forward: a week in about a minute
 const SETTLE_MS = Number(process.env.NEAR_SETTLE_MS || 15000)
 const STARTING_COINS = 40
+/** Testnet NEAR given to each new player's wallet so they can bet and use the team pool. */
+const WELCOME_GRANT = parseNear(process.env.NEAR_WELCOME_GRANT || '0.05')
 
 const ShopIdZ = z.enum(SHOPS.map(s => s.id) as [ShopId, ...ShopId[]])
 const GoodZ = z.enum(GOOD_IDS as [GoodId, ...GoodId[]])
@@ -132,7 +134,7 @@ class VillageManager {
         const profile = this.wallets.registerPlayer(uid, username)
         if (isNew) {
             this.wallets.credit(uid, COIN, STARTING_COINS)
-            chain.ensureAccount(profile.accountId)
+            chain.ensureAccount(profile.accountId, WELCOME_GRANT)
         }
         return profile
     }

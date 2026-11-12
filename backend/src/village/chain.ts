@@ -12,7 +12,7 @@ import 'dotenv/config'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { Account, JsonRpcProvider, KeyPair } from 'near-api-js'
+import { Account, actions, JsonRpcProvider, KeyPair } from 'near-api-js'
 import { Delta, Wallets } from './wallets'
 
 const NETWORK = process.env.NEAR_NETWORK || 'testnet'
@@ -113,7 +113,51 @@ class Chain {
     }
 
     /** Create `<name>.<root>` as a real NEAR account controlled by the server key (a custodial game wallet). */
-    ensureAccount(accountId: string) {
+    /** Call a contract AS a player's wallet (gasless for the player), so the player is the real caller on-chain. */
+    callAs(accountId: string, contractId: string, methodName: string, args: object, summary: string, opts: { gas?: bigint; deposit?: bigint } = {}) {
+        return this.enqueue(async () => {
+            if (!this.enabled) throw new Error('NEAR is disabled on this server')
+            const key = loadKey()!
+            const player = new Account(accountId, this.provider, key as any)
+            let res: any
+            try {
+                // NEP-366 meta transaction: the player signs, the server relays it and pays the gas.
+                // Any attached deposit (a bet, a pool deposit) still comes out of the player's own wallet.
+                const { signedDelegate } = await player.createSignedMetaTransaction({
+                    receiverId: contractId,
+                    actions: [actions.functionCall(methodName, args, opts.gas ?? 30n * TGAS, opts.deposit ?? 0n)],
+                } as any)
+                res = await this.account!.signAndSendTransaction({
+                    receiverId: accountId,
+                    actions: [actions.signedDelegate(signedDelegate)],
+                    throwOnFailure: false,
+                } as any)
+            } catch (e: any) {
+                this.record(methodName, `${summary} (failed)`, null, false)
+                throw new Error(cleanError(e?.message ?? String(e)))
+            }
+            const failure = res?.status?.Failure
+            const tx = this.record(methodName, summary, res, !failure)
+            if (failure) throw new Error(cleanError(JSON.stringify(failure)))
+            let value: any = null
+            try {
+                const b64 = res?.status?.SuccessValue
+                if (b64) value = JSON.parse(Buffer.from(b64, 'base64').toString())
+            } catch { /* not JSON */ }
+            return { tx, value }
+        })
+    }
+
+    async nearBalance(accountId: string): Promise<bigint> {
+        try {
+            const a: any = await this.provider.viewAccount({ accountId } as any)
+            return BigInt(a.amount ?? a.balance?.total ?? 0)
+        } catch {
+            return 0n
+        }
+    }
+
+    ensureAccount(accountId: string, funding: bigint = ACCOUNT_FUNDING) {
         if (!this.enabled || this.created.has(accountId) || !accountId.endsWith(`.${ROOT}`)) return Promise.resolve()
         this.created.add(accountId)
         return this.enqueue(async () => {
@@ -122,8 +166,8 @@ class Chain {
                 return // already exists
             } catch { /* not found → create */ }
             try {
-                const res = await this.account!.createAccount({ newAccountId: accountId, publicKey: this.publicKey!, nearToTransfer: ACCOUNT_FUNDING } as any)
-                this.record('create_account', `Created wallet ${accountId}`, res, true)
+                const res = await this.account!.createAccount({ newAccountId: accountId, publicKey: this.publicKey!, nearToTransfer: funding } as any)
+                this.record('create_account', `Created wallet ${accountId}${funding > ACCOUNT_FUNDING ? ` with a ${formatNear(funding)} NEAR welcome grant` : ''}`, res, true)
             } catch (e: any) {
                 if (!String(e?.message).includes('already exists')) {
                     this.created.delete(accountId)
@@ -185,3 +229,20 @@ class Chain {
 }
 
 export const chain = new Chain()
+
+export const YOCTO = 10n ** 24n
+export function formatNear(yocto: bigint | string, digits = 4) {
+    const v = BigInt(yocto)
+    const whole = v / YOCTO
+    const frac = (v % YOCTO).toString().padStart(24, '0').slice(0, digits).replace(/0+$/, '')
+    return frac ? `${whole}.${frac}` : `${whole}`
+}
+export function parseNear(near: number | string): bigint {
+    const [w, f = ''] = String(near).split('.')
+    return BigInt(w || '0') * YOCTO + BigInt((f + '0'.repeat(24)).slice(0, 24))
+}
+/** Turn NEAR panics into a readable sentence. */
+export function cleanError(raw: string) {
+    const m = raw.match(/Smart contract panicked: ([^"\\]+)/) || raw.match(/panicked at [^:]+:\d+:\d+:\s*([^"\\]+)/) || raw.match(/"ExecutionError":"([^"]+)"/)
+    return (m ? m[1] : raw).slice(0, 200)
+}
