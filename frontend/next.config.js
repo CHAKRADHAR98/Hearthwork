@@ -12,7 +12,6 @@ const nextConfig = {
                 os: false,
                 crypto: false,
                 stream: false,
-                buffer: require.resolve('buffer/'),
                 zlib: false,
             }
         }
