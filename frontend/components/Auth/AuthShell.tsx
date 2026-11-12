@@ -14,7 +14,7 @@ export default function AuthShell({ title, subtitle, children, footer }: { title
         <main className='relative min-h-screen overflow-hidden bg-gradient-to-b from-hearth-night via-hearth-dusk to-[#3b3550] flex flex-col items-center justify-center px-4 py-16'>
             <VillageSkyline className='absolute bottom-0 left-0 w-full h-48 sm:h-64' />
             <Link href='/' className='relative z-10 mb-6 flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hearth-honey'>
-                <img src='/logo.svg' alt='' className='w-10 h-10' />
+                <img src='/hearthwork-logo.svg' alt='' className='w-10 h-10' />
                 <span className='font-pixel text-2xl text-hearth-parchment'>Hearthwork</span>
             </Link>
             <section className='relative z-10 w-full max-w-md rounded-2xl border-2 border-hearth-line bg-hearth-ink p-6 sm:p-8 shadow-[0_12px_50px_rgba(0,0,0,0.5)]'>

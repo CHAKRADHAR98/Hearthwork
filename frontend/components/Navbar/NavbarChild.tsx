@@ -22,7 +22,7 @@ export const NavbarChild:React.FC<NavbarChildProps> = ({ name, avatar_url }) => 
                 <div className='flex items-center gap-4'>
                     <Link href='/app'>
                         <Image
-                            src='/logo.png'
+                            src='/hearthwork-logo.png'
                             alt='Hearthwork'
                             width={40}
                             height={40}

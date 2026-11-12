@@ -45,7 +45,7 @@ export default function Landing() {
             <header className='sticky top-0 z-30 border-b border-hearth-line/60 bg-[#1a1510]/85 backdrop-blur'>
                 <nav className='mx-auto flex max-w-6xl items-center gap-4 px-4 py-3'>
                     <Link href='/' className='flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hearth-honey'>
-                        <img src='/logo.svg' alt='' className='h-9 w-9' />
+                        <img src='/hearthwork-logo.svg' alt='' className='h-9 w-9' />
                         <span className='hidden font-pixel text-xl min-[400px]:inline'>Hearthwork</span>
                     </Link>
                     <div className='ml-6 hidden gap-5 text-sm text-hearth-sand md:flex'>

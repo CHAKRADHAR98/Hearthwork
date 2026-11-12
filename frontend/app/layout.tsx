@@ -23,9 +23,9 @@ export const metadata = {
   title: "Hearthwork",
   description: "A virtual office with a living village economy on NEAR.",
   icons: {
-    icon: '/logo.png',
-    shortcut: '/logo.png',
-    apple: '/logo.png',
+    icon: '/hearthwork-logo.svg',
+    shortcut: '/hearthwork-logo.png',
+    apple: '/hearthwork-logo.png',
   },
 }
 
