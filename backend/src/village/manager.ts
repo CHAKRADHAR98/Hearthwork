@@ -1,7 +1,5 @@
 // Runs one Village per office, persists them, ticks the clock, settles to NEAR and talks to clients.
 
-import fs from 'fs'
-import path from 'path'
 import { Server, Socket } from 'socket.io'
 import { z } from 'zod'
 import { aiEnabled, gossip, haggle } from './agents'
@@ -10,11 +8,11 @@ import { COIN, GATHER_SPOTS, GOODS, GOOD_IDS, GoodId } from './goods'
 import { SHOP_BY_ID, ShopId, SHOPS } from './shops'
 import { Deal, Village, VillageEvent } from './village'
 import { Wallets } from './wallets'
+import { loadState, saveState } from '../storage'
 import { EXTRA_TOKENS, HAT_BY_ID, HATS, ProjectInfo, PROJECTS, RARES, TOOLS } from './extras'
 import { buildSiteFor, placeLandmarks } from './marketRoom'
 import { sessionManager } from '../session'
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data')
 const HOUR_MS = Number(process.env.VILLAGE_HOUR_MS || 2500) // one game hour; a day lasts one minute
 const FAST_HOUR_MS = 350 // fast-forward: a week in about a minute
 const SETTLE_MS = Number(process.env.NEAR_SETTLE_MS || 15000)
@@ -40,12 +38,13 @@ class VillageManager {
     running: Record<string, Running> = {}
     io!: Server
 
-    init(io: Server) {
+    /** Saved village documents (`village:<officeId>`), loaded from the database at startup. */
+    private saved = new Map<string, any>()
+
+    async init(io: Server) {
         this.io = io
-        fs.mkdirSync(path.join(DATA_DIR, 'villages'), { recursive: true })
-        try {
-            this.wallets = Wallets.fromJSON(JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'wallets.json'), 'utf8')))
-        } catch { /* fresh start */ }
+        this.saved = await loadState()
+        if (this.saved.has('wallets')) this.wallets = Wallets.fromJSON(this.saved.get('wallets'))
         chain.init()
         chain.registerTokens(EXTRA_TOKENS)
         chain.onTx(tx => io.emit('village:chainTx', { ...tx, url: tx.hash ? chain.explorerTx(tx.hash) : null }))
@@ -64,12 +63,14 @@ class VillageManager {
     get(realmId: string): Running {
         if (this.running[realmId]) return this.running[realmId]
         let village: Village
+        const snap = this.saved.get(`village:${realmId}`)
         try {
-            const snap = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'villages', `${realmId}.json`), 'utf8'))
-            village = Village.fromJSON(realmId, this.wallets, snap)
-        } catch {
+            village = snap ? Village.fromJSON(realmId, this.wallets, snap) : new Village(realmId, this.wallets)
+        } catch (e) {
+            console.error('[village] could not restore', realmId, e)
             village = new Village(realmId, this.wallets)
         }
+        village.reconcileWithWallets()
         const r: Running = { village, timer: null as any, fastForwardLeft: 0, lastEventSent: village.eventSeq, conversations: {}, lastGossip: 0 }
         this.running[realmId] = r
         for (const def of SHOPS) chain.ensureAccount(this.wallets.accountId(village.shopAccount(def.id)))
@@ -80,12 +81,8 @@ class VillageManager {
     /** Landmarks this office has built (works without starting its simulation, e.g. for the editor). */
     builtIds(realmId: string): string[] {
         if (this.running[realmId]) return this.running[realmId].village.built.map(b => b.id)
-        try {
-            const snap = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'villages', `${realmId}.json`), 'utf8'))
-            return (snap.built ?? []).map((b: { id: string }) => b.id)
-        } catch {
-            return []
-        }
+        const snap = this.saved.get(`village:${realmId}`)
+        return (snap?.built ?? []).map((b: { id: string }) => b.id)
     }
 
     /** A project was finished: put the landmark on this office's live map and show it to everyone inside. */
@@ -123,7 +120,13 @@ class VillageManager {
         const r = this.running[realmId]
         clearTimeout(r.timer)
         r.timer = setTimeout(() => {
-            r.village.tick()
+            try {
+                r.village.tick()
+            } catch (e: any) {
+                // never let one bad hour take the whole server down: log it, line the books up again, keep going
+                console.error('[village] tick failed in', realmId, e?.message ?? e)
+                r.village.reconcileWithWallets()
+            }
             if (r.fastForwardLeft > 0) {
                 r.fastForwardLeft--
                 if (r.fastForwardLeft === 0) this.io.to(this.room(realmId)).emit('village:fastForward', { running: false })
@@ -167,13 +170,21 @@ class VillageManager {
         })
     }
 
-    save() {
-        try {
-            fs.writeFileSync(path.join(DATA_DIR, 'wallets.json'), JSON.stringify(this.wallets))
-            for (const [id, r] of Object.entries(this.running)) fs.writeFileSync(path.join(DATA_DIR, 'villages', `${id}.json`), JSON.stringify(r.village))
-        } catch (e) {
-            console.error('[village] save failed', e)
+    private saving: Promise<void> | null = null
+
+    /** Write wallets and every running village to the database (one transaction). Safe to call often. */
+    save(): Promise<void> {
+        if (this.saving) return this.saving
+        const docs: [string, unknown][] = [['wallets', this.wallets.toJSON()]]
+        for (const [id, r] of Object.entries(this.running)) {
+            const snap = r.village.toJSON()
+            this.saved.set(`village:${id}`, snap)
+            docs.push([`village:${id}`, snap])
         }
+        this.saving = saveState(docs)
+            .catch(e => console.error('[village] save failed', e?.message ?? e))
+            .finally(() => { this.saving = null })
+        return this.saving
     }
 
     // ───────────────────────── players ─────────────────────────
