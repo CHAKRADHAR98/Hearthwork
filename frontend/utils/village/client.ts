@@ -77,7 +77,12 @@ export async function joinVillage() {
         s.on('village:say', (m: { shopId: string; text: string }) => signal.emit('villageSay', m))
         s.on('village:chainTx', (tx: ChainTx) => set({ chain: { ...store.chain, recent: [tx, ...store.chain.recent].slice(0, 30) } }))
         s.on('village:fastForward', (f: { running: boolean }) => set({ fastForward: f.running }))
-        s.on('connect', () => { joinVillage() })
+        s.on('connect', async () => {
+            // after a reconnect, wait for the office session to be restored before rejoining
+            for (let i = 0; i < 30; i++) {
+                try { await joinVillage(); return } catch { await new Promise(r => setTimeout(r, 700)) }
+            }
+        })
     }
     const res = await call('village:join')
     set({

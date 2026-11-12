@@ -214,13 +214,38 @@ class Chain {
                     const failure = res?.status?.Failure
                     this.record('apply_deltas', summary, res, !failure)
                     if (!failure) wallets.markSynced(batch)
-                    else console.error('[near] apply_deltas failed', JSON.stringify(failure).slice(0, 300))
+                    else {
+                        console.error('[near] apply_deltas failed', JSON.stringify(failure).slice(0, 300))
+                        await this.resync(wallets, batch)
+                    }
                 } catch (e: any) {
                     this.record('apply_deltas', `${summary} (failed)`, null, false)
                     console.error('[near] apply_deltas error', e?.message)
+                    await this.resync(wallets, batch)
                 }
             }
         })
+    }
+
+    /**
+     * Self-healing: if a batch was rejected, our idea of the on-chain balances drifted (for example a queued
+     * transaction was lost when the server restarted). Read the real balances back from the contract so the
+     * next settlement sends exactly the right corrections.
+     */
+    private async resync(wallets: Wallets, batch: Delta[]) {
+        const parties = [...new Map(batch.map(d => [d.party, d.accountId])).entries()]
+        for (const [party, accountId] of parties) {
+            try {
+                const onChain: { token_id: string; amount: string }[] = await this.view(ITEMS_CONTRACT, 'balances_of', { account_id: accountId })
+                const tokens = new Set([...Object.keys(wallets.synced[party] ?? {}), ...onChain.map(b => b.token_id)])
+                const fresh: Record<string, number> = {}
+                for (const t of tokens) fresh[t] = Number(onChain.find(b => b.token_id === t)?.amount ?? 0)
+                wallets.synced[party] = fresh
+            } catch (e: any) {
+                console.error('[near] resync failed for', accountId, e?.message)
+            }
+        }
+        console.log(`[near] resynced ${parties.length} accounts from chain`)
     }
 
     explorerTx(hash: string) {

@@ -26,8 +26,15 @@ export default function VillageHUD() {
         let stop = false
         const tryJoin = async () => {
             while (!stop && !server.socket?.connected) await new Promise(r => setTimeout(r, 400))
-            if (stop) return
-            joinVillage().catch(e => console.error('village join failed', e))
+            // The socket can be connected before the server has placed us in the office, so retry until it works.
+            for (let attempt = 0; !stop && attempt < 30; attempt++) {
+                try {
+                    await joinVillage()
+                    return
+                } catch {
+                    await new Promise(r => setTimeout(r, 700))
+                }
+            }
         }
         tryJoin()
         return () => { stop = true }
