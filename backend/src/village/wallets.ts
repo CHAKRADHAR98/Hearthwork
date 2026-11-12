@@ -7,6 +7,14 @@
 export interface Profile {
     name: string
     accountId: string
+    /** Hat token id the player wears (shown on their character everywhere). */
+    hat?: string
+    /** Rare finds ever collected, for the collection book. */
+    found?: string[]
+    /** Uses left on each tool the player owns (the next one starts fresh when this one breaks). */
+    wear?: Record<string, number>
+    /** Gathers since the last rare find (the lucky streak). */
+    sinceRare?: number
 }
 
 export interface Delta {

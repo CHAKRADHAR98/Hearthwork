@@ -10,6 +10,9 @@ import { COIN, GATHER_SPOTS, GOODS, GOOD_IDS, GoodId } from './goods'
 import { SHOP_BY_ID, ShopId, SHOPS } from './shops'
 import { Deal, Village, VillageEvent } from './village'
 import { Wallets } from './wallets'
+import { EXTRA_TOKENS, HAT_BY_ID, HATS, ProjectInfo, PROJECTS, RARES, TOOLS } from './extras'
+import { placeLandmarks } from './marketRoom'
+import { sessionManager } from '../session'
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data')
 const HOUR_MS = Number(process.env.VILLAGE_HOUR_MS || 2500) // one game hour; a day lasts one minute
@@ -44,6 +47,7 @@ class VillageManager {
             this.wallets = Wallets.fromJSON(JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'wallets.json'), 'utf8')))
         } catch { /* fresh start */ }
         chain.init()
+        chain.registerTokens(EXTRA_TOKENS)
         chain.onTx(tx => io.emit('village:chainTx', { ...tx, url: tx.hash ? chain.explorerTx(tx.hash) : null }))
         setInterval(() => this.save(), 30000)
         setInterval(() => {
@@ -68,6 +72,42 @@ class VillageManager {
         for (const def of SHOPS) chain.ensureAccount(this.wallets.accountId(village.shopAccount(def.id)))
         this.schedule(realmId)
         return r
+    }
+
+    /** Landmarks this office has built (works without starting its simulation, e.g. for the editor). */
+    builtIds(realmId: string): string[] {
+        if (this.running[realmId]) return this.running[realmId].village.built.map(b => b.id)
+        try {
+            const snap = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'villages', `${realmId}.json`), 'utf8'))
+            return (snap.built ?? []).map((b: { id: string }) => b.id)
+        } catch {
+            return []
+        }
+    }
+
+    /** A project was finished: put the landmark on this office's live map and show it to everyone inside. */
+    private onBuilt(realmId: string, p: ProjectInfo) {
+        const session = sessionManager.getSession(realmId)
+        if (!session) return
+        const placed = placeLandmarks(session.map_data, [p.id])
+        for (const pl of placed) this.io.to(this.room(realmId)).emit('village:built', { ...pl, name: p.name, icon: p.icon, reward: p.reward })
+        if (!placed.length) this.io.to(this.room(realmId)).emit('village:built', { id: p.id, name: p.name, icon: p.icon, reward: p.reward })
+    }
+
+    /** Hats worn by everyone currently in this office. */
+    private hatsInRoom(realmId: string) {
+        const hats: Record<string, string> = {}
+        for (const sid of this.io.sockets.adapter.rooms.get(this.room(realmId)) ?? []) {
+            const uid = this.io.sockets.sockets.get(sid)?.handshake.query.uid as string
+            const hat = uid && this.wallets.profiles[uid]?.hat
+            if (hat && HAT_BY_ID[hat]) hats[uid] = HAT_BY_ID[hat].icon
+        }
+        return hats
+    }
+
+    private emitHat(realmId: string, uid: string) {
+        const hat = this.wallets.profiles[uid]?.hat
+        this.io.to(this.room(realmId)).emit('village:hat', { uid, hat: hat && HAT_BY_ID[hat] ? HAT_BY_ID[hat].icon : null })
     }
 
     private schedule(realmId: string) {
@@ -141,7 +181,10 @@ class VillageManager {
 
     walletView(uid: string) {
         const p = this.wallets.profiles[uid]
-        return { uid, name: p?.name, accountId: p?.accountId, balances: this.wallets.all(uid), onChain: chain.enabled }
+        return {
+            uid, name: p?.name, accountId: p?.accountId, balances: this.wallets.all(uid), onChain: chain.enabled,
+            hat: p?.hat ?? null, found: p?.found ?? [], wear: p?.wear ?? {}, sinceRare: p?.sinceRare ?? 0,
+        }
     }
 
     sendWallet(uid: string) {
@@ -182,6 +225,8 @@ class VillageManager {
                 chain: { enabled: chain.enabled, items: ITEMS_CONTRACT, market: MARKET_CONTRACT, pool: POOL_CONTRACT, recent: chain.recent.slice(0, 15).map(t => ({ ...t, url: t.hash ? chain.explorerTx(t.hash) : null })) },
                 ai: aiEnabled(),
                 fastForward: r.fastForwardLeft > 0,
+                catalog: { rares: RARES, tools: TOOLS, hats: HATS, projects: PROJECTS },
+                hats: this.hatsInRoom(realmId),
             }
         })
 
@@ -193,6 +238,29 @@ class VillageManager {
         handle('village:gather', z.object({ spot: z.string() }), ({ uid, r }, { spot }) => {
             const got = r.village.gather(uid, spot)
             return { gathered: got, text: `+${got.qty} ${GOODS[got.good].icon} ${GOODS[got.good].name}` }
+        })
+
+        handle('village:buyItem', z.object({ item: z.string().max(32) }), ({ uid, realmId, r }, { item }) => {
+            const res = r.village.buyItem(uid, item)
+            if (HAT_BY_ID[item]) this.emitHat(realmId, uid)
+            return res
+        })
+
+        handle('village:wearHat', z.object({ hat: z.string().max(32).nullable() }), ({ uid, realmId, r }, { hat }) => {
+            const res = r.village.wearHat(uid, hat)
+            this.emitHat(realmId, uid)
+            return res
+        })
+
+        handle('village:sellRare', z.object({ rare: z.string().max(32) }), ({ uid, r }, { rare }) => r.village.sellRare(uid, rare))
+
+        handle('village:donate', z.object({ token: z.string().max(32), qty: z.number().int().min(1).max(10000) }), ({ uid, realmId, r }, d) => {
+            const res = r.village.donate(uid, d.token, d.qty)
+            if (res.completed) {
+                this.onBuilt(realmId, res.completed)
+                this.save()
+            }
+            return { amount: res.amount, completed: res.completed?.id ?? null }
         })
 
         handle('village:buy', z.object({ shopId: ShopIdZ, good: GoodZ, qty: Qty, dealId: z.string().optional() }), ({ uid, r }, d) => {
@@ -241,7 +309,11 @@ class VillageManager {
 
         handle('village:takeJob', z.object({ jobId: z.string() }), ({ uid, r }, { jobId }) => ({ job: r.village.takeJob(uid, jobId) }))
 
-        handle('village:deliverJob', z.object({ jobId: z.string() }), ({ uid, r }, { jobId }) => ({ job: r.village.deliverJob(uid, jobId) }))
+        handle('village:deliverJob', z.object({ jobId: z.string() }), ({ uid, realmId, r }, { jobId }) => {
+            const job = r.village.deliverJob(uid, jobId)
+            this.io.to(this.room(realmId)).emit('village:say', { shopId: job.shopId, text: job.thanks })
+            return { job }
+        })
 
         handle('village:invest', z.object({ shopId: ShopIdZ, amount: z.number().int().min(1).max(100000) }), ({ uid, r }, d) => r.village.invest(uid, d.shopId, d.amount))
 

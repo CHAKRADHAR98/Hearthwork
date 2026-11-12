@@ -1,4 +1,5 @@
-import { withEditableMarket, withMarketSquare } from '../village/marketRoom'
+import { stripLockedLandmarks, withEditableMarket, withMarketSquare } from '../village/marketRoom'
+import { villageManager } from '../village/manager'
 import { Router, Request, Response, NextFunction } from 'express'
 import { GetPlayersInRoom, GetPlayerCounts } from './route-types'
 import { z } from 'zod'
@@ -158,9 +159,11 @@ export default function routes(): Router {
             }
 
             // Players get the generated Market Square room; the editor gets the map exactly as saved.
-            if (req.query.play === '1' && realm.map_data) realm.map_data = withMarketSquare(realm.map_data)
+            if (req.query.play === '1' && realm.map_data) realm.map_data = withMarketSquare(realm.map_data, villageManager.builtIds(realm.id))
             // The editor always gets a Market Square room to customise (the default one until it is saved).
-            if (req.query.editor === '1' && realm.map_data) realm.map_data = withEditableMarket(realm.map_data)
+            if (req.query.editor === '1' && realm.map_data) realm.map_data = withEditableMarket(realm.map_data, villageManager.builtIds(realm.id))
+            // Landmarks this office unlocked by finishing team projects (placeable in its editor only).
+            realm.landmarks = villageManager.builtIds(realm.id)
             return res.json({ realm })
         } catch (error) {
             console.error('Error fetching realm:', error)
@@ -307,7 +310,8 @@ export default function routes(): Router {
             }
             if (map_data !== undefined) {
                 updates.push(`map_data = $${paramCount++}`)
-                values.push(JSON.stringify(map_data))
+                // only landmarks this office built itself may be on its map
+                values.push(JSON.stringify(stripLockedLandmarks(map_data, villageManager.builtIds(realmId))))
             }
 
             if (updates.length === 0) {

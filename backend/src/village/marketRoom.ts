@@ -18,8 +18,15 @@ export const DEFAULT_SPOTS: Record<string, { x: number; y: number }> = {
     dock: { x: 9, y: 10 }, field: { x: 12, y: 10 }, mine: { x: 15, y: 10 }, pasture: { x: 18, y: 10 },
 }
 const W = 25
-const H = 17
-const EXIT = { x: 12, y: 16 }
+const H = 20
+const EXIT = { x: 12, y: 19 }
+
+/** Footprint (tiles) of each team-project landmark, and where it goes in the default room (bottom-left tile). */
+export const LANDMARKS: Record<string, { sprite: string; w: number; h: number; site: { x: number; y: number } }> = {
+    bridge: { sprite: 'landmarks-bridge', w: 4, h: 3, site: { x: 3, y: 16 } },
+    fountain: { sprite: 'landmarks-fountain', w: 4, h: 4, site: { x: 15, y: 17 } },
+    well: { sprite: 'landmarks-well', w: 2, h: 3, site: { x: 20, y: 16 } },
+}
 
 type Tile = Room['tilemap'][`${number}, ${number}`] & { villageId?: string; villageSpot?: string; villageExit?: boolean; [k: string]: unknown }
 type MarketRoom = Room & { market?: boolean }
@@ -57,7 +64,7 @@ export function defaultMarketRoom(): MarketRoom {
     }
     for (let y = H - 3; y < H; y++) t[key(EXIT.x, y)] = { floor: 'ground-detailed_dirt' }
     t[key(EXIT.x, EXIT.y)] = { floor: 'ground-detailed_dirt', villageExit: true }
-    for (const [x, y, obj] of [[2, 13, 'village-crate'], [3, 13, 'village-small_crate'], [22, 13, 'village-crate'], [21, 2, 'village-small_crate']] as const) {
+    for (const [x, y, obj] of [[2, 17, 'village-crate'], [22, 17, 'village-crate'], [21, 2, 'village-small_crate']] as const) {
         t[key(x, y)] = { ...t[key(x, y)], object: obj }
     }
     for (const [id, p] of Object.entries(DEFAULT_SPOTS)) t[key(p.x, p.y)] = { ...t[key(p.x, p.y)], villageSpot: id }
@@ -80,21 +87,88 @@ function besideTile(room: Room, p: { x: number; y: number }, fallback: { x: numb
         .find(q => walkable(room.tilemap[key(q.x, q.y)] as Tile)) ?? fallback
 }
 
+// ───────────────────────── team-project landmarks ─────────────────────────
+
+export const isLandmark = (object?: string) => !!object && object.startsWith('landmarks-')
+
+/** Can a landmark of this size sit with its bottom-left tile at (x, y)? Keeps clear of stalls, spots and exits. */
+function siteFree(room: Room, x: number, y: number, w: number, h: number) {
+    const near = tilesWhere(room, t => !!t.villageSpot || !!t.villageExit || !!t.villageId || !!t.teleporter)
+    // tiles covered by landmarks already standing (only their bottom-left tile holds the object)
+    const covered = new Set<string>()
+    for (const p of tilesWhere(room, t => isLandmark(t.object as string))) {
+        const lm = Object.values(LANDMARKS).find(l => l.sprite === (room.tilemap[key(p.x, p.y)] as Tile).object)
+        if (!lm) continue
+        for (let dx = 0; dx < lm.w; dx++) for (let dy = 0; dy < lm.h; dy++) covered.add(key(p.x + dx, p.y - dy))
+    }
+    for (let dx = 0; dx < w; dx++) {
+        for (let dy = 0; dy < h; dy++) {
+            const tx = x + dx, ty = y - dy
+            if (!walkable(room.tilemap[key(tx, ty)] as Tile) || covered.has(key(tx, ty))) return false
+            if (near.some(p => Math.abs(p.x - tx) <= 1 && ty - p.y >= -1 && ty - p.y <= 2)) return false
+        }
+    }
+    return true
+}
+
+/** Nearest free site to `prefer` for a landmark, or null if the room is full. */
+function findSite(room: Room, w: number, h: number, prefer: { x: number; y: number }) {
+    if (siteFree(room, prefer.x, prefer.y, w, h)) return prefer
+    const cells = Object.keys(room.tilemap).map(k => { const [x, y] = k.split(',').map(Number); return { x, y } })
+    cells.sort((a, b) => Math.abs(a.x - prefer.x) + Math.abs(a.y - prefer.y) - (Math.abs(b.x - prefer.x) + Math.abs(b.y - prefer.y)))
+    return cells.find(c => siteFree(room, c.x, c.y, w, h)) ?? null
+}
+
+/**
+ * Put every landmark this office has built into its Market Square, unless the owner already placed it somewhere
+ * (in the editor they can move it to any room). Mutates `data`. Returns what was newly placed.
+ */
+export function placeLandmarks(data: RealmData, built: string[]) {
+    const placed: { id: string; sprite: string; roomIndex: number; x: number; y: number }[] = []
+    const marketIndex = data.rooms.findIndex(isMarketRoom)
+    if (marketIndex === -1) return placed
+    const market = data.rooms[marketIndex]
+    for (const id of built) {
+        const lm = LANDMARKS[id]
+        if (!lm) continue
+        const already = data.rooms.some(r => Object.values(r.tilemap).some(t => (t as Tile).object === lm.sprite))
+        if (already) continue
+        const site = findSite(market, lm.w, lm.h, lm.site)
+        if (!site) continue
+        ;(market.tilemap[key(site.x, site.y)] as Tile).object = lm.sprite
+        placed.push({ id, sprite: lm.sprite, roomIndex: marketIndex, ...site })
+    }
+    return placed
+}
+
+/** Remove landmarks this office hasn't built (the editor can't be used to sneak one in). */
+export function stripLockedLandmarks(map: RealmData, built: string[]) {
+    const allowed = new Set(built.map(id => LANDMARKS[id]?.sprite).filter(Boolean))
+    for (const room of map.rooms ?? []) {
+        for (const t of Object.values(room.tilemap ?? {}) as Tile[]) {
+            if (isLandmark(t.object as string) && !allowed.has(t.object as string)) delete t.object
+        }
+    }
+    return map
+}
+
 /** For the editor: the map with a Market Square room to customise (the default one if none was saved). */
-export function withEditableMarket(map: RealmData): RealmData {
+export function withEditableMarket(map: RealmData, built: string[] = []): RealmData {
     const data: RealmData = JSON.parse(JSON.stringify(map))
     if (!data.rooms.some(isMarketRoom)) data.rooms.push(defaultMarketRoom())
+    placeLandmarks(data, built)
     return data
 }
 
 /** For playing: the map with the Market Square present and every entrance/exit wired as a teleporter. */
-export function withMarketSquare(map: RealmData): RealmData {
+export function withMarketSquare(map: RealmData, built: string[] = []): RealmData {
     const data: RealmData = JSON.parse(JSON.stringify(map))
     let marketIndex = data.rooms.findIndex(isMarketRoom)
     if (marketIndex === -1) {
         data.rooms.push(defaultMarketRoom())
         marketIndex = data.rooms.length - 1
     }
+    placeLandmarks(data, built)
     const market = data.rooms[marketIndex]
     ;(market as MarketRoom).market = true
 

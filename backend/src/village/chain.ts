@@ -177,6 +177,35 @@ class Chain {
         })
     }
 
+    /**
+     * Make sure the items contract knows every kind of item (tools, hats, rare finds). Runs first in the queue,
+     * so no settlement can mention an unknown token.
+     */
+    registerTokens(list: { id: string; name: string; icon: string }[]) {
+        if (!this.enabled) return Promise.resolve()
+        return this.enqueue(async () => {
+            let known: (unknown | null)[]
+            try {
+                known = await this.view(ITEMS_CONTRACT, 'mt_token', { token_ids: list.map(t => t.id) })
+            } catch (e: any) {
+                console.error('[near] could not read registered tokens', e?.message)
+                return
+            }
+            for (const [i, t] of list.entries()) {
+                if (known[i]) continue
+                try {
+                    const res: any = await this.account!.callFunctionRaw({
+                        contractId: ITEMS_CONTRACT, methodName: 'register_token',
+                        args: { token_id: t.id, name: t.name, symbol: t.id.toUpperCase().slice(0, 12), icon: t.icon }, gas: 30n * TGAS,
+                    })
+                    this.record('register_token', `New item type on chain: ${t.icon} ${t.name}`, res, !res?.status?.Failure)
+                } catch (e: any) {
+                    console.error('[near] register_token failed', t.id, e?.message)
+                }
+            }
+        })
+    }
+
     /** Player <-> shopkeeper trade as one atomic NEP-245 swap. */
     trade(wallets: Wallets, buyer: string, seller: string, good: string, qty: number, unitPrice: number) {
         if (!this.enabled) return

@@ -9,7 +9,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "heroku-postbuild": "npm run build",
-    "sim": "tsx src/village/sim.ts"
+    "sim": "tsx src/village/sim.ts",
+    "check:features": "tsx scripts/features-check.ts"
   },
   "keywords": [],
   "author": "",

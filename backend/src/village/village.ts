@@ -5,6 +5,10 @@ import { COIN, GATHER_COOLDOWN_SEC, GATHER_SPOTS, GOODS, GOOD_IDS, GoodId, Inven
 import { buyPrice, dailyCosts, haggleCeiling, haggleFloor, PriceQuote, RULES, sellPrice, StockView, townsfolkDemand } from './pricing'
 import { DIVIDEND_SHARE, REOPEN_CASH, SHOPS, SHOP_BY_ID, ShopDef, ShopId, TRADER_SUPPLY_DAILY } from './shops'
 import { Wallets } from './wallets'
+import {
+    CROWN, HAT_BY_ID, MAX_REQUESTS, ORDERS, pick, PROJECT_BY_ID, PROJECTS, ProjectEffect, ProjectInfo, RARE_BASE_CHANCE, RARE_BY_ID,
+    RARE_MAX_CHANCE, RARE_STREAK_BONUS, RARE_TIER2_SHARE, RARES, REQUEST_SIZES, RequestSize, THANKS, TOOL_BY_ID, TOOL_FOR_SPOT, TOOL_RARE_BONUS,
+} from './extras'
 
 export interface ShopState {
     id: ShopId
@@ -32,6 +36,26 @@ export interface Job {
     postedAt: number
     expiresAt: number
     takenBy?: string
+    /** small / big / urgent (older saves have none: treated as small). */
+    size?: RequestSize
+    /** 'shop': the shop pays and keeps the goods. 'town': a townsfolk order the shop passes on (the customer pays). */
+    funded?: 'shop' | 'town'
+    /** Why the shopkeeper wants it, shown on the requests board. */
+    note?: string
+}
+
+export interface ProjectState {
+    /** Index into PROJECTS of the one being built now (PROJECTS.length when all are done). */
+    index: number
+    given: Record<string, number>
+    /** Donation points per player (coins worth). */
+    helpers: Record<string, number>
+}
+
+export interface Built {
+    id: string
+    day: number
+    helpers: string[]
 }
 
 export interface Pact {
@@ -45,7 +69,7 @@ export interface Pact {
 export interface VillageEvent {
     id: number
     t: number
-    kind: 'trade' | 'bankrupt' | 'reopen' | 'job' | 'pact' | 'invest' | 'gossip' | 'gather' | 'dividend' | 'info'
+    kind: 'trade' | 'bankrupt' | 'reopen' | 'job' | 'pact' | 'invest' | 'gossip' | 'gather' | 'dividend' | 'info' | 'rare' | 'project' | 'built'
     text: string
     shopId?: ShopId
     uid?: string
@@ -72,6 +96,8 @@ export interface VillageSnapshot {
     playerSoldToday: Record<string, Partial<Record<GoodId, number>>>
     marketSoldToday: Partial<Record<GoodId, number>>
     lastGather: Record<string, Record<string, number>>
+    project?: ProjectState
+    built?: Built[]
 }
 
 export const TOWNSFOLK = '@townsfolk' // outside world: coins and goods enter and leave the village here
@@ -90,6 +116,8 @@ export class Village {
     playerSoldToday: Record<string, Partial<Record<GoodId, number>>> = {}
     marketSoldToday: Partial<Record<GoodId, number>> = {}
     lastGather: Record<string, Record<string, number>> = {}
+    project: ProjectState = { index: 0, given: {}, helpers: {} }
+    built: Built[] = []
 
     constructor(public realmId: string, public wallets: Wallets, private rng: () => number = Math.random) {
         this.shops = {} as Record<ShopId, ShopState>
@@ -217,7 +245,7 @@ export class Village {
             this.townsfolk()
         }
         if (this.hour === 12) this.lunch()
-        if (this.hour % 6 === 0) this.postJobs()
+        if (this.hour % 3 === 0) this.postJobs()
         this.expireJobs()
         this.updatePacts()
         this.recordPrices()
@@ -304,7 +332,8 @@ export class Village {
             for (const [good, daily] of Object.entries(def.townsfolkDaily) as [GoodId, number][]) {
                 const q = this.quoteSell(def.id, good)
                 const key = `folk:${good}`
-                s.carry[key] = (s.carry[key] ?? 0) + townsfolkDemand(good, daily, q.price) * (24 / 14)
+                const crowd = this.hasBuilt('townsfolk') ? 1.2 : 1 // the fountain draws more visitors
+                s.carry[key] = (s.carry[key] ?? 0) + townsfolkDemand(good, daily, q.price) * (24 / 14) * crowd
                 const want = Math.floor(s.carry[key]!)
                 if (want <= 0) continue
                 s.carry[key]! -= want
@@ -377,29 +406,59 @@ export class Village {
 
     // ───────────────────────── jobs (shopkeepers hire players) ─────────────────────────
 
-    private postJobs() {
+    /**
+     * Requests board. Every few hours a shopkeeper asks for goods: either something its own shop is short of
+     * (the shop pays) or a special order from the townsfolk (the customer pays). Sizes: small, big, urgent.
+     */
+    postJobs() {
+        if (this.jobs.length >= MAX_REQUESTS) return
+        const size: RequestSize = ((r: number) => (r < 0.2 ? 'urgent' : r < 0.45 ? 'big' : 'small'))(this.rng())
+        const spec = REQUEST_SIZES[size]
+        const qtyFor = () => spec.qty[0] + Math.floor(this.rng() * (spec.qty[1] - spec.qty[0] + 1))
+        const busy = (id: ShopId) => this.jobs.filter(j => j.shopId === id).length >= 2
+
+        // 1) a shop that is short of something it needs
+        const shortages: { def: ShopDef; good: GoodId }[] = []
         for (const def of SHOPS) {
             const s = this.shops[def.id]
-            if (!s.open || this.jobs.some(j => j.shopId === def.id)) continue
+            if (!s.open || busy(def.id)) continue
             for (const good of def.buys) {
-                const target = def.targets[good] ?? 0
-                const have = s.stock[good] ?? 0
-                if (have > target * 0.4) continue
-                const qty = Math.max(3, Math.min(12, Math.ceil(target - have)))
-                const unit = Math.ceil(this.quoteBuy(def.id, good).price * 1.25)
-                const reward = qty * unit
-                if (s.coins - s.reserved < reward + def.upkeep) continue
-                s.reserved += reward
-                const job: Job = { id: `${def.id}-${this.t}`, shopId: def.id, good, qty, reward, postedAt: this.t, expiresAt: this.t + 24 }
-                this.jobs.push(job)
-                this.log('job', `📜 ${def.name} is hiring: deliver ${qty} ${GOODS[good].name} for ${reward} coins`, { shopId: def.id })
-                break
+                if (this.jobs.some(j => j.shopId === def.id && j.good === good)) continue
+                if ((s.stock[good] ?? 0) <= (def.targets[good] ?? 0) * 0.5) shortages.push({ def, good })
             }
         }
+        if (shortages.length && this.rng() < 0.6) {
+            const { def, good } = pick(shortages, this.rng)
+            const s = this.shops[def.id]
+            const qty = qtyFor()
+            const unit = Math.max(1, Math.ceil(this.quoteBuy(def.id, good).price * spec.premium))
+            const reward = qty * unit
+            if (s.coins - s.reserved >= reward + def.upkeep) {
+                s.reserved += reward
+                this.addJob({ shopId: def.id, good, qty, reward, size, funded: 'shop', note: 'running low in the shop' })
+                return
+            }
+        }
+
+        // 2) a townsfolk order passed on by a shopkeeper
+        const orders = ORDERS.filter(o => this.shops[o.shopId].open && !busy(o.shopId) && !this.jobs.some(j => j.shopId === o.shopId && j.good === o.good))
+        if (!orders.length) return
+        const o = pick(orders, this.rng)
+        const qty = qtyFor()
+        const reward = Math.ceil(qty * GOODS[o.good].basePrice * spec.premium)
+        this.addJob({ shopId: o.shopId, good: o.good, qty, reward, size, funded: 'town', note: o.note })
+    }
+
+    private addJob(j: Omit<Job, 'id' | 'postedAt' | 'expiresAt'>) {
+        const job: Job = { ...j, id: `${j.shopId}-${this.t}-${Math.floor(this.rng() * 1e6)}`, postedAt: this.t, expiresAt: this.t + REQUEST_SIZES[j.size ?? 'small'].hours }
+        this.jobs.push(job)
+        const def = SHOP_BY_ID[j.shopId]
+        const tag = j.size === 'urgent' ? '⏰ URGENT: ' : j.size === 'big' ? '📦 Big order: ' : '📜 '
+        this.log('job', `${tag}${def.name} needs ${j.qty} ${GOODS[j.good].icon} ${GOODS[j.good].name} (${j.note}). Pays ${j.reward} coins.`, { shopId: j.shopId })
     }
 
     private cancelJob(job: Job) {
-        this.shops[job.shopId].reserved -= job.reward
+        if ((job.funded ?? 'shop') === 'shop') this.shops[job.shopId].reserved -= job.reward
         this.jobs = this.jobs.filter(j => j.id !== job.id)
     }
 
@@ -419,15 +478,24 @@ export class Village {
         const job = this.jobs.find(j => j.id === jobId)
         if (!job) throw new Error('That job is gone.')
         if (job.takenBy && job.takenBy !== uid) throw new Error('Someone else took that job.')
-        if (this.wallets.balance(uid, job.good) < job.qty) throw new Error(`You need ${job.qty} ${GOODS[job.good].name}.`)
+        const have = this.wallets.balance(uid, job.good)
+        if (have < job.qty) throw new Error(`You need ${job.qty} ${GOODS[job.good].icon} ${GOODS[job.good].name} (you have ${have}).`)
         const s = this.shops[job.shopId]
-        s.reserved -= job.reward
-        this.move(uid, this.shopAccount(job.shopId), job.good, job.qty)
-        this.move(this.shopAccount(job.shopId), uid, COIN, job.reward)
+        const def = SHOP_BY_ID[job.shopId]
+        if (!s.open) throw new Error(`${def.name}'s shop is closed.`)
+        if ((job.funded ?? 'shop') === 'shop') {
+            s.reserved -= job.reward
+            this.move(uid, this.shopAccount(job.shopId), job.good, job.qty)
+            this.move(this.shopAccount(job.shopId), uid, COIN, job.reward)
+        } else {
+            // a townsfolk order: the shop keeps goods it can use, the rest goes to the customer; the customer pays
+            this.move(uid, def.buys.includes(job.good) ? this.shopAccount(job.shopId) : TOWNSFOLK, job.good, job.qty)
+            this.move(TOWNSFOLK, uid, COIN, job.reward)
+        }
         this.jobs = this.jobs.filter(j => j.id !== jobId)
         s.mood = Math.min(1, s.mood + 0.3)
-        this.log('job', `✅ ${this.wallets.name(uid)} delivered ${job.qty} ${GOODS[job.good].name} to ${SHOP_BY_ID[job.shopId].name} for ${job.reward} coins`, { shopId: job.shopId, uid })
-        return job
+        this.log('job', `✅ ${this.wallets.name(uid)} delivered ${job.qty} ${GOODS[job.good].icon} to ${def.name} for ${job.reward} coins`, { shopId: job.shopId, uid })
+        return { ...job, thanks: pick(THANKS[job.shopId], this.rng) }
     }
 
     // ───────────────────────── price pacts (collusion) ─────────────────────────
@@ -474,10 +542,150 @@ export class Village {
         const wait = GATHER_COOLDOWN_SEC * 1000 - (nowMs - last)
         if (wait > 0) throw new Error(`Still recovering, try again in ${Math.ceil(wait / 1000)}s.`)
         ;(this.lastGather[uid] ??= {})[spot] = nowMs
+        const prof = this.profile(uid)
         const [lo, hi] = g.perAction
-        const qty = lo + Math.floor(this.rng() * (hi - lo + 1))
+        let qty = lo + Math.floor(this.rng() * (hi - lo + 1))
+
+        // a tool doubles the haul and wears out
+        let tool: { id: string; name: string; icon: string; usesLeft: number; broke: boolean } | undefined
+        const t = TOOL_FOR_SPOT[spot]
+        if (t && this.wallets.balance(uid, t.id) > 0) {
+            qty *= 2
+            const wear = (prof.wear ??= {})
+            const left = (wear[t.id] ?? t.uses) - 1
+            const broke = left <= 0
+            if (broke) {
+                this.burnFrom(uid, t.id, 1)
+                delete wear[t.id]
+            } else wear[t.id] = left
+            tool = { id: t.id, name: t.name, icon: t.icon, usesLeft: broke ? 0 : left, broke }
+        }
         this.mintTo(uid, g.good, qty)
-        return { good: g.good, qty }
+
+        // rare find: a small chance that grows with every gather that found nothing (the lucky streak)
+        const streak = prof.sinceRare ?? 0
+        let chance = Math.min(RARE_MAX_CHANCE, RARE_BASE_CHANCE + streak * RARE_STREAK_BONUS + (tool ? TOOL_RARE_BONUS : 0))
+        if (this.hasBuilt('luck')) chance = Math.min(0.6, chance * 1.5)
+        let rare: { id: string; name: string; icon: string; value: number; isNew: boolean } | undefined
+        let collectionDone = false
+        if (this.rng() < chance) {
+            const tier = this.rng() < RARE_TIER2_SHARE ? 2 : 1
+            const r = RARES.find(x => x.spot === spot && x.tier === tier)!
+            this.mintTo(uid, r.id, 1)
+            prof.sinceRare = 0
+            const found = (prof.found ??= [])
+            const isNew = !found.includes(r.id)
+            if (isNew) found.push(r.id)
+            rare = { id: r.id, name: r.name, icon: r.icon, value: r.value, isNew }
+            this.log('rare', `✨ ${this.wallets.name(uid)} found ${r.tier === 2 ? 'a very rare' : 'a'} ${r.icon} ${r.name} at the ${g.label.toLowerCase()}!`, { uid })
+            if (isNew && found.length >= RARES.length && this.wallets.balance(uid, CROWN) === 0) {
+                this.mintTo(uid, CROWN, 1)
+                collectionDone = true
+                this.log('rare', `👑 ${this.wallets.name(uid)} completed the collection book and earned the Collector's crown!`, { uid })
+            }
+        } else prof.sinceRare = streak + 1
+        return { good: g.good, qty, tool, rare, collectionDone, luck: Math.round(Math.min(RARE_MAX_CHANCE, RARE_BASE_CHANCE + (prof.sinceRare ?? 0) * RARE_STREAK_BONUS) * 100) }
+    }
+
+    private profile(uid: string) {
+        return this.wallets.profiles[uid] ?? this.wallets.registerPlayer(uid, uid)
+    }
+
+    hasBuilt(effect: ProjectEffect) {
+        return this.built.some(b => PROJECT_BY_ID[b.id]?.effect === effect)
+    }
+
+    // ───────────────────────── tools, hats and rare finds ─────────────────────────
+
+    /** Buy a tool from the blacksmith or a hat from the tailor. Each one uses up one of the shop's goods. */
+    buyItem(uid: string, itemId: string) {
+        const tool = TOOL_BY_ID[itemId]
+        const hat = HAT_BY_ID[itemId]
+        if (!tool && !hat) throw new Error('Unknown item.')
+        const shopId: ShopId = tool ? 'smith' : 'tailor'
+        const material: GoodId = tool ? 'tools' : 'cloth'
+        const price = tool ? tool.price : hat.price
+        const def = SHOP_BY_ID[shopId]
+        const s = this.shops[shopId]
+        if (price == null) throw new Error('This one can\'t be bought. Fill the collection book to earn it!')
+        if (!s.open) throw new Error(`${def.name}'s shop is closed.`)
+        if (hat && this.wallets.balance(uid, itemId) > 0) throw new Error('You already own this hat.')
+        if ((s.stock[material] ?? 0) < 1) throw new Error(`${def.name} is out of ${GOODS[material].name.toLowerCase()} to make it. Try later!`)
+        if (this.wallets.balance(uid, COIN) < price) throw new Error(`You need ${price} coins.`)
+        this.move(uid, this.shopAccount(shopId), COIN, price)
+        this.burnFrom(this.shopAccount(shopId), material, 1)
+        this.noteSale(shopId, material, 1)
+        this.mintTo(uid, itemId, 1)
+        const item = tool ?? hat
+        if (hat) this.profile(uid).hat = itemId
+        this.log('trade', `${this.wallets.name(uid)} bought a ${item.icon} ${item.name} from ${def.name} for ${price}`, { shopId, uid })
+        return { item: itemId, price }
+    }
+
+    wearHat(uid: string, hatId: string | null) {
+        if (hatId && !HAT_BY_ID[hatId]) throw new Error('Unknown hat.')
+        if (hatId && this.wallets.balance(uid, hatId) < 1) throw new Error('You don\'t own that hat.')
+        this.profile(uid).hat = hatId ?? undefined
+        return { hat: hatId }
+    }
+
+    /** Rare finds sell to a collector in town through the shopkeeper who knows about them. */
+    sellRare(uid: string, rareId: string) {
+        const r = RARE_BY_ID[rareId]
+        if (!r) throw new Error('Unknown item.')
+        const def = SHOP_BY_ID[r.buyer]
+        if (!this.shops[r.buyer].open) throw new Error(`${def.name}'s shop is closed.`)
+        if (this.wallets.balance(uid, rareId) < 1) throw new Error(`You don't have a ${r.name}.`)
+        this.move(uid, TOWNSFOLK, rareId, 1)
+        this.move(TOWNSFOLK, uid, COIN, r.value)
+        this.mintTo(this.shopAccount(r.buyer), COIN, 5) // the shopkeeper's finder's fee
+        this.shops[r.buyer].mood = Math.min(1, this.shops[r.buyer].mood + 0.2)
+        this.log('trade', `${def.name} sold ${this.wallets.name(uid)}'s ${r.icon} ${r.name} to a collector for ${r.value} coins`, { shopId: r.buyer, uid })
+        return { value: r.value }
+    }
+
+    // ───────────────────────── team project (the office builds a landmark) ─────────────────────────
+
+    currentProject(): ProjectInfo | null {
+        return PROJECTS[this.project.index] ?? null
+    }
+
+    /** Donate goods or coins to the current project. Returns the finished project when this donation completes it. */
+    donate(uid: string, token: string, qty: number) {
+        const p = this.currentProject()
+        if (!p) throw new Error('Every project is built. What a village!')
+        const needs = p.needs as Record<string, number>
+        const need = (needs[token] ?? 0) - (this.project.given[token] ?? 0)
+        if (!needs[token]) throw new Error(`The ${p.name} doesn't need that.`)
+        if (need <= 0) throw new Error(`The ${p.name} has enough of that already.`)
+        const amount = Math.min(qty, need)
+        const have = this.wallets.balance(uid, token)
+        if (have < amount) throw new Error(`You only have ${have}.`)
+        this.move(uid, TOWNSFOLK, token, amount) // used up in the building
+        this.project.given[token] = (this.project.given[token] ?? 0) + amount
+        const points = amount * (token === COIN ? 1 : GOODS[token as GoodId].basePrice)
+        this.project.helpers[uid] = (this.project.helpers[uid] ?? 0) + points
+        const label = token === COIN ? '🪙 coins' : `${GOODS[token as GoodId].icon} ${GOODS[token as GoodId].name}`
+        this.log('project', `🧱 ${this.wallets.name(uid)} gave ${amount} ${label} to the ${p.name}`, { uid })
+        const done = Object.entries(needs).every(([k, n]) => (this.project.given[k] ?? 0) >= n)
+        if (!done) return { amount, completed: null as ProjectInfo | null }
+        const helpers = Object.entries(this.project.helpers).sort((a, b) => b[1] - a[1]).map(([u]) => this.wallets.name(u))
+        this.built.push({ id: p.id, day: this.day, helpers: helpers.slice(0, 5) })
+        this.project = { index: this.project.index + 1, given: {}, helpers: {} }
+        this.log('built', `🎉 The office built the ${p.icon} ${p.name}! ${p.reward} Thanks to ${helpers.slice(0, 3).join(', ')}.`)
+        return { amount, completed: p }
+    }
+
+    projectView() {
+        const p = this.currentProject()
+        return {
+            current: p && {
+                ...p, given: this.project.given,
+                helpers: Object.entries(this.project.helpers).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([u, pts]) => ({ name: this.wallets.name(u), points: pts })),
+            },
+            built: this.built.map(b => ({ ...b, ...PROJECT_BY_ID[b.id] })),
+            total: PROJECTS.length,
+        }
     }
 
     /** Player buys from a shop at the list price, or at an agreed deal price. */
@@ -507,7 +715,10 @@ export class Village {
         ;(this.playerSoldToday[uid] ??= {})[good] = (this.playerSoldToday[uid][good] ?? 0) + qty
         this.marketSoldToday[good] = (this.marketSoldToday[good] ?? 0) + qty
         this.log('trade', `${this.wallets.name(uid)} sold ${qty} ${GOODS[good].name} to ${def.name} for ${qty * unit}`, { shopId, uid })
-        return { qty, unitPrice: unit, total: qty * unit }
+        // the Old Bridge brings traders: +10% on top, paid by them
+        const bonus = this.hasBuilt('saleBonus') ? Math.floor(qty * unit * 0.1) : 0
+        if (bonus > 0) this.move(TOWNSFOLK, uid, COIN, bonus)
+        return { qty, unitPrice: unit, total: qty * unit, bonus }
     }
 
     invest(uid: string, shopId: ShopId, amount: number) {
@@ -591,6 +802,7 @@ export class Village {
             }),
             jobs: this.jobs,
             pacts: this.pacts,
+            project: this.projectView(),
             prices: Object.fromEntries(Object.entries(this.priceHistory).map(([g, h]) => [g, h.slice(-24 * 7)])),
         }
     }
@@ -599,7 +811,7 @@ export class Village {
         return {
             t: this.t, shops: Object.values(this.shops), jobs: this.jobs, pacts: this.pacts, priceHistory: this.priceHistory,
             eventSeq: this.eventSeq, events: this.events.slice(-100), playerSoldToday: this.playerSoldToday,
-            marketSoldToday: this.marketSoldToday, lastGather: this.lastGather,
+            marketSoldToday: this.marketSoldToday, lastGather: this.lastGather, project: this.project, built: this.built,
         }
     }
 
@@ -610,6 +822,7 @@ export class Village {
             t: snap.t, jobs: snap.jobs, pacts: snap.pacts, priceHistory: snap.priceHistory, eventSeq: snap.eventSeq,
             events: snap.events, playerSoldToday: snap.playerSoldToday, marketSoldToday: snap.marketSoldToday,
             lastGather: snap.lastGather ?? {},
+            project: snap.project ?? { index: 0, given: {}, helpers: {} }, built: snap.built ?? [],
             shops: Object.fromEntries(snap.shops.map(s => [s.id, s])),
         })
         return v
