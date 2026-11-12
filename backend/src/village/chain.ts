@@ -228,13 +228,17 @@ class Chain {
         ]
         // Count it as synced now so the next settlement does not apply it twice; undo if the call fails.
         wallets.markSynced(legs)
+        const busy = (d: number) => { for (const p of [buyer, seller]) this.tradesInFlight.set(p, (this.tradesInFlight.get(p) ?? 0) + d) }
+        busy(1)
         const summary = `${wallets.name(buyer)} bought ${qty} ${good} from ${wallets.name(seller)} for ${qty * unitPrice} coin`
         // Make sure both sides' earlier changes are on chain first.
         this.settle(wallets, 'before trade')
         this.call(ITEMS_CONTRACT, 'trade', {
             buyer_id: wallets.accountId(buyer), seller_id: wallets.accountId(seller),
             token_id: good, amount: String(qty), price: String(qty * unitPrice), memo: summary,
-        }, summary).catch(() => wallets.markSynced(legs.map(l => ({ ...l, amount: -l.amount }))))
+        }, summary)
+            .catch(() => wallets.markSynced(legs.map(l => ({ ...l, amount: -l.amount }))))
+            .finally(() => busy(-1))
     }
 
     /** Push every balance change since the last sync in batched apply_deltas calls. */
@@ -289,6 +293,54 @@ class Chain {
             }
         }
         console.log(`[near] resynced ${parties.length} accounts from chain`)
+    }
+
+    private reconciling = false
+    /** Parties with a trade queued but not yet confirmed (already counted as synced): the audit leaves them alone. */
+    private tradesInFlight = new Map<string, number>()
+
+    /**
+     * Audit: read every account's real balances from the contract and treat those as "synced", so the next
+     * settlement sends exactly the corrections needed. Repairs drift that no rejected batch would reveal (for
+     * example a trade that was queued when the server restarted). Each read runs in the chain queue, so it never
+     * races a settlement or trade for the same account. Reads are spaced out to respect RPC rate limits.
+     */
+    async reconcile(wallets: Wallets) {
+        if (!this.enabled || this.reconciling) return
+        this.reconciling = true
+        let checked = 0, fixed = 0, failed = 0
+        try {
+            const parties = [...new Set([...Object.keys(wallets.balances), ...Object.keys(wallets.synced)])]
+                .filter(p => wallets.accountId(p).endsWith(`.${ROOT}`))
+            for (const party of parties) {
+                await this.enqueue(async () => {
+                    if ((this.tradesInFlight.get(party) ?? 0) > 0) return // checked again next audit
+                    const accountId = wallets.accountId(party)
+                    let onChain: { token_id: string; amount: string }[]
+                    try {
+                        onChain = await this.view(ITEMS_CONTRACT, 'balances_of', { account_id: accountId })
+                    } catch {
+                        failed++
+                        return
+                    }
+                    checked++
+                    const fresh: Record<string, number> = {}
+                    for (const b of onChain) fresh[b.token_id] = Number(b.amount)
+                    const before = wallets.synced[party] ?? {}
+                    const tokens = new Set([...Object.keys(before), ...Object.keys(fresh)])
+                    if ([...tokens].some(t => (before[t] ?? 0) !== (fresh[t] ?? 0))) {
+                        fixed++
+                        console.log(`[near] audit: ${accountId} drifted; chain ${JSON.stringify(fresh)} vs assumed ${JSON.stringify(before)}`)
+                    }
+                    wallets.synced[party] = fresh
+                })
+                await new Promise(r => setTimeout(r, 400))
+            }
+        } finally {
+            this.reconciling = false
+        }
+        console.log(`[near] audit: ${checked} accounts checked against the contract, ${fixed} corrected on the next settlement${failed ? `, ${failed} unreadable (retry next audit)` : ''}`)
+        return { checked, fixed, failed }
     }
 
     explorerTx(hash: string) {

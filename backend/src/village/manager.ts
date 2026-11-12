@@ -50,6 +50,9 @@ class VillageManager {
         chain.registerTokens(EXTRA_TOKENS)
         chain.onTx(tx => io.emit('village:chainTx', { ...tx, url: tx.hash ? chain.explorerTx(tx.hash) : null }))
         setInterval(() => this.save(), 30000)
+        // audit on-chain balances shortly after start and every 10 minutes (repairs any drift)
+        setTimeout(() => chain.reconcile(this.wallets), 20_000)
+        setInterval(() => chain.reconcile(this.wallets), Number(process.env.NEAR_AUDIT_MS || 600_000))
         setInterval(() => {
             const day = Object.values(this.running)[0]?.village.day
             chain.settle(this.wallets, day ? `village activity up to day ${day}` : 'village activity')
