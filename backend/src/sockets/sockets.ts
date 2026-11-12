@@ -7,6 +7,7 @@ import { sessionManager } from '../session'
 import { removeExtraSpaces } from '../utils'
 import { kickPlayer } from './helpers'
 import { verifyToken } from '../auth/jwt'
+import { villageManager } from '../village/manager'
 
 const joiningInProgress = new Set<string>()
 
@@ -86,6 +87,14 @@ export function sockets(io: Server) {
                 io.to(socketId).emit(eventName, data)
             }
         }
+
+        villageManager.attach(socket, () => {
+            const uid = socket.handshake.query.uid as string
+            const session = sessionManager.getPlayerSession(uid)
+            if (!session) return null
+            const player = session.getPlayer(uid)
+            return { uid, username: player?.username ?? users.getUser(uid)?.username ?? 'villager', realmId: session.id }
+        })
 
         socket.on('joinRealm', async (realmData: z.infer<typeof JoinRealm>) => {
             const uid = socket.handshake.query.uid as string

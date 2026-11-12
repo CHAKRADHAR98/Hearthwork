@@ -79,6 +79,15 @@ pub struct Balance {
 }
 
 #[near(serializers = [json])]
+pub struct DeltaEntry {
+    pub account_id: AccountId,
+    pub token_id: TokenId,
+    pub amount: U128,
+    /// true = mint to the account, false = burn from it
+    pub increase: bool,
+}
+
+#[near(serializers = [json])]
 pub struct ItemAmount {
     pub token_id: TokenId,
     pub amount: U128,
@@ -229,6 +238,30 @@ impl Contract {
             self.internal_transfer(&sender_id, &receiver_id, t, a.0);
         }
         emit("mt_transfer", json!([{ "old_owner_id": sender_id, "new_owner_id": receiver_id, "token_ids": token_ids, "amounts": amounts, "memo": memo }]));
+    }
+
+    /// Settle a batch of balance changes from the village simulation (shopkeeper production,
+    /// townsfolk purchases, upkeep...). Increases are applied first so a batch that is valid as a
+    /// whole never fails on ordering. Emits NEP-245 mint/burn events with the memo.
+    pub fn apply_deltas(&mut self, entries: Vec<DeltaEntry>, memo: Option<String>) {
+        self.assert_operator();
+        let (ups, downs): (Vec<_>, Vec<_>) = entries.into_iter().partition(|e| e.increase);
+        let mut minted = Vec::new();
+        let mut burned = Vec::new();
+        for e in ups {
+            self.internal_mint(&e.account_id, &e.token_id, e.amount.0);
+            minted.push(json!({ "owner_id": e.account_id, "token_ids": [e.token_id], "amounts": [e.amount], "memo": memo }));
+        }
+        for e in downs {
+            self.internal_burn(&e.account_id, &e.token_id, e.amount.0);
+            burned.push(json!({ "owner_id": e.account_id, "token_ids": [e.token_id], "amounts": [e.amount], "memo": memo }));
+        }
+        if !minted.is_empty() {
+            emit("mt_mint", json!(minted));
+        }
+        if !burned.is_empty() {
+            emit("mt_burn", json!(burned));
+        }
     }
 
     // ───────────────────────── NEP-245 core ─────────────────────────
@@ -601,6 +634,23 @@ mod tests {
         c.mint(acc("alice.test"), "wheat".into(), U128(10), None);
         testing_env!(ctx("alice.test").build());
         c.mt_transfer(acc("bob.test"), "wheat".into(), U128(4), None, None);
+    }
+
+    #[test]
+    fn apply_deltas_settles_batch() {
+        let mut c = setup();
+        testing_env!(ctx("server.test").build());
+        c.mint(acc("baker.test"), "wheat".into(), U128(2), None);
+        c.apply_deltas(
+            vec![
+                DeltaEntry { account_id: acc("baker.test"), token_id: "wheat".into(), amount: U128(3), increase: false },
+                DeltaEntry { account_id: acc("baker.test"), token_id: "wheat".into(), amount: U128(5), increase: true },
+                DeltaEntry { account_id: acc("baker.test"), token_id: "bread".into(), amount: U128(3), increase: true },
+            ],
+            Some("day 1".into()),
+        );
+        assert_eq!(c.mt_balance_of(acc("baker.test"), "wheat".into()).0, 4);
+        assert_eq!(c.mt_balance_of(acc("baker.test"), "bread".into()).0, 3);
     }
 
     #[test]

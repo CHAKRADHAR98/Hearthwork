@@ -9,6 +9,7 @@ import routes from './routes/routes'
 import { authRoutes } from './auth/routes'
 import { sessionManager } from './session'
 import pool from './db'
+import { villageManager } from './village/manager'
 
 const app = express()
 const server = http.createServer(app)
@@ -36,6 +37,7 @@ app.use('/auth', authRoutes())
 app.use(routes())
 
 sockets(io)
+villageManager.init(io)
 
 async function onRealmUpdate(realmId: string) {
     const client = await pool.connect()
@@ -55,6 +57,8 @@ async function onRealmDelete(realmId: string) {
 }
 
 const PORT = process.env.PORT || 3001
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { villageManager.save(); process.exit(0) })
+
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}.`)
 })
