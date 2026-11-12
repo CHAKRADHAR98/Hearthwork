@@ -1,4 +1,4 @@
-require('dotenv').config() // real environment variables (e.g. on Render) win over .env
+import './env' // must stay first: loads .env and trims every setting
 
 import express from 'express'
 import cors from 'cors'
