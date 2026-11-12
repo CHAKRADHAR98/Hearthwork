@@ -76,11 +76,11 @@ export default function Index() {
 
       {/* Bottom status bar */}
       <div className='absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-6 z-10'>
-        <span className='text-gray-700 text-xs tracking-widest font-orbitron uppercase'>Solana</span>
+        <span className='text-gray-700 text-xs tracking-widest font-orbitron uppercase'>NEAR</span>
         <div className='w-1 h-1 rounded-full bg-gray-700' />
         <span className='text-gray-700 text-xs tracking-widest font-orbitron uppercase'>Multiplayer</span>
         <div className='w-1 h-1 rounded-full bg-gray-700' />
-        <span className='text-gray-700 text-xs tracking-widest font-orbitron uppercase'>Prediction Market</span>
+        <span className='text-gray-700 text-xs tracking-widest font-orbitron uppercase'>Village Economy</span>
       </div>
 
     </div>

@@ -182,18 +182,6 @@ input[type=number]::-webkit-outer-spin-button {
 }
 
 
-.solana-button {
-    background: linear-gradient(90deg, #9945FF, #14F195);
-    color: white;
-    font-weight: 600;
-    transition: all 0.3s ease;
-}
-
-.solana-button:hover {
-    filter: brightness(1.2);
-    box-shadow: 0 0 20px rgba(20, 241, 149, 0.4);
-}
-
 .animate-colors {
     transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);

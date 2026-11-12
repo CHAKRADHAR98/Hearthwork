@@ -36,11 +36,6 @@ next-env.d.ts
 
 dist
 
-# Solana / Anchor build artifacts
-gather/target/
-gather/.anchor/
-gather/test-ledger/
-gather/**/*.rs.bk
 # NEAR contract build output
 contracts/*/target/
 # village save files

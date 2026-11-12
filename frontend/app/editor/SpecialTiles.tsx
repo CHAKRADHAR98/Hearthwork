@@ -46,18 +46,18 @@ const SpecialTiles:React.FC<SpecialTilesProps> = ({ specialTile, selectSpecialTi
             </SpecialTileItem>
             <SpecialTileItem
                 iconColor='purple'
-                title='Market Portal'
-                description='Players who enter this area are prompted to visit the prediction market.'
+                title='Predictions'
+                description='Players who step here open the office prediction markets (on NEAR).'
                 selected={specialTile === 'Market'}
                 onClick={() => selectSpecialTile('Market')}>
                 <ChartLineUp className='w-12 h-12'/>
             </SpecialTileItem>
             <SpecialTileItem
                 iconColor='green'
-                title='SOL Well'
-                description='A community SOL pool. Developers can deposit surplus SOL or withdraw up to 1 SOL/day.'
-                selected={specialTile === 'SolPool'}
-                onClick={() => selectSpecialTile('SolPool')}>
+                title='Team Pool'
+                description="Players who step here open the office's shared NEAR pool."
+                selected={specialTile === 'Pool'}
+                onClick={() => selectSpecialTile('Pool')}>
                 <CurrencyDollar className='w-12 h-12'/>
             </SpecialTileItem>
         </div>

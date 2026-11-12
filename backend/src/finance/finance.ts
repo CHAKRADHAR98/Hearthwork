@@ -1,5 +1,5 @@
 // Office finance on NEAR: prediction markets (market.hearthwork.testnet) and the team pool (pool.hearthwork.testnet).
-// Both replace the old Solana programs. Each player signs with their own NEAR wallet account
+// Each player signs with their own NEAR wallet account
 // (a custodial account the server created for them at sign-in), so bets and deposits are truly theirs.
 
 import { Socket } from 'socket.io'

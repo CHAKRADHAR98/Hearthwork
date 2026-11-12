@@ -123,9 +123,9 @@ export class EditorApp extends App {
                 this.setUpEraserTool(sprite, x, y, 'gizmo')
             }
 
-            if (value.solPoolId) {
+            if (value.poolId) {
                 const [x, y] = key.split(',').map(Number)
-                const sprite = this.placeSolPoolSprite(x, y)
+                const sprite = this.placePoolSprite(x, y)
                 this.setUpEraserTool(sprite, x, y, 'gizmo')
             }
         }
@@ -485,8 +485,8 @@ export class EditorApp extends App {
         } else if (type === 'Market') {
             this.placeMarketArea(x, y, tile, snapshot)
             return
-        } else if (type === 'SolPool') {
-            this.placeSolPool(x, y, tile, snapshot)
+        } else if (type === 'Pool') {
+            this.placePool(x, y, tile, snapshot)
             return
         }
 
@@ -780,20 +780,20 @@ export class EditorApp extends App {
         this.updateRealmData(newRealmData, snapshot)
     }
 
-    private placeSolPool = (x: number, y: number, tile: PIXI.Sprite, snapshot: boolean) => {
+    private placePool = (x: number, y: number, tile: PIXI.Sprite, snapshot: boolean) => {
         const key = `${x}, ${y}` as TilePoint
         if (
             (this.realmData.spawnpoint.x === x && this.realmData.spawnpoint.y === y) ||
             this.realmData.rooms[this.currentRoomIndex].tilemap[key]?.teleporter ||
             this.realmData.rooms[this.currentRoomIndex].tilemap[key]?.privateAreaId ||
             this.realmData.rooms[this.currentRoomIndex].tilemap[key]?.marketAreaId ||
-            this.realmData.rooms[this.currentRoomIndex].tilemap[key]?.solPoolId
+            this.realmData.rooms[this.currentRoomIndex].tilemap[key]?.poolId
         ) return
-        this.addSolPoolToRealmData(x, y, snapshot)
-        this.placeSolPoolSprite(x, y, tile)
+        this.addPoolToRealmData(x, y, snapshot)
+        this.placePoolSprite(x, y, tile)
     }
 
-    private placeSolPoolSprite = (x: number, y: number, tile?: PIXI.Sprite) => {
+    private placePoolSprite = (x: number, y: number, tile?: PIXI.Sprite) => {
         const key = `${x}, ${y}` as TilePoint
         const sprite = tile || new PIXI.Sprite(PIXI.Texture.from('/sprites/faded-tile.png'))
         sprite.tint = 0x00FF88
@@ -804,12 +804,12 @@ export class EditorApp extends App {
         return sprite
     }
 
-    private addSolPoolToRealmData = (x: number, y: number, snapshot: boolean) => {
+    private addPoolToRealmData = (x: number, y: number, snapshot: boolean) => {
         const key = `${x}, ${y}` as TilePoint
         const newRealmData = this.getRealmDataCopy()
         newRealmData.rooms[this.currentRoomIndex].tilemap[key] = {
             ...newRealmData.rooms[this.currentRoomIndex].tilemap[key],
-            solPoolId: 'sol_pool'
+            poolId: 'pool'
         }
         this.updateRealmData(newRealmData, snapshot)
     }
@@ -822,7 +822,7 @@ export class EditorApp extends App {
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].teleporter
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].privateAreaId
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].marketAreaId
-            delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].solPoolId
+            delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].poolId
 
             // delete the key if no data on it
             if (Object.keys(newRealmData.rooms[this.currentRoomIndex].tilemap[key]).length === 0) {
@@ -1028,11 +1028,11 @@ export class EditorApp extends App {
             marketTile.tint = 0xAA44FF
             const layer = 'gizmo'
             return { data: {} as SpriteSheetTile, layer, tile: marketTile, type: 'Market' }
-        } else if (this.specialTileMode === 'SolPool') {
-            const solPoolTile = new PIXI.Sprite(PIXI.Texture.from('/sprites/faded-tile.png'))
-            solPoolTile.tint = 0x00FF88
+        } else if (this.specialTileMode === 'Pool') {
+            const poolTile = new PIXI.Sprite(PIXI.Texture.from('/sprites/faded-tile.png'))
+            poolTile.tint = 0x00FF88
             const layer = 'gizmo'
-            return { data: {} as SpriteSheetTile, layer, tile: solPoolTile, type: 'SolPool' }
+            return { data: {} as SpriteSheetTile, layer, tile: poolTile, type: 'Pool' }
         }
 
         const data = sprites.getSpriteData(this.selectedPalette, this.selectedTile)

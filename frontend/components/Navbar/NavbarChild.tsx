@@ -2,7 +2,7 @@
 import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { PlusCircleIcon, ArrowTrendingUpIcon } from '@heroicons/react/24/outline'
+import { PlusCircleIcon } from '@heroicons/react/24/outline'
 import { useModal } from '@/app/hooks/useModal'
 import BasicButton from '../BasicButton'
 
@@ -34,12 +34,6 @@ export const NavbarChild:React.FC<NavbarChildProps> = ({ name, avatar_url }) => 
                             Create Space
                             <PlusCircleIcon className='h-4'/>
                         </BasicButton>
-                        <Link href='/market'>
-                            <BasicButton className='flex flex-row items-center gap-2 py-2 text-xs'>
-                                Prediction Market
-                                <ArrowTrendingUpIcon className='h-4'/>
-                            </BasicButton>
-                        </Link>
                     </div>
                 </div>
                 {/* User area */}

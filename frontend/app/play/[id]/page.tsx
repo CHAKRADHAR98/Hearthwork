@@ -56,8 +56,6 @@ export default async function Play({ params, searchParams }: { params: { id: str
             shareId={searchParams.shareId || ''}
             initialSkin={user.skin || '009'}
             name={realm.name}
-            marketEnabled={realm.market_enabled ?? false}
-            marketPubkey={realm.market_pubkey ?? null}
         />
     )
 }

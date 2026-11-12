@@ -18,51 +18,18 @@ const CreateRealmModal: React.FC = () => {
     const [realmName,        setRealmName]        = useState<string>('')
     const [useDefaultMap,    setUseDefaultMap]    = useState<boolean>(true)
     const [loading,          setLoading]          = useState<boolean>(false)
-    const [enableMarket,     setEnableMarket]     = useState<boolean>(false)
-    const [walletPubkey,     setWalletPubkey]     = useState<string>('')
-    const [connectingWallet, setConnectingWallet] = useState<boolean>(false)
-
-    async function connectWallet() {
-        const solana = (window as any).solana
-        if (!solana) {
-            toast.error('No Solana wallet found. Please install Phantom or Solflare.')
-            return
-        }
-        setConnectingWallet(true)
-        try {
-            await solana.connect()
-            setWalletPubkey(solana.publicKey.toString())
-            toast.success('Wallet connected!')
-        } catch {
-            toast.error('Wallet connection cancelled.')
-        }
-        setConnectingWallet(false)
-    }
-
-    function handleEnableMarketToggle(e: React.ChangeEvent<HTMLInputElement>) {
-        setEnableMarket(e.target.checked)
-        if (!e.target.checked) setWalletPubkey('')
-    }
 
     async function createRealm() {
         const token = getToken()
         const user  = getUser()
         if (!token || !user) return toast.error('Not authenticated')
 
-        if (enableMarket && !walletPubkey) {
-            return toast.error('Please connect your Solana wallet.')
-        }
-
         setLoading(true)
         const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
         try {
-            const body: Record<string, any> = {
+            const body = {
                 name:     realmName,
                 map_data: useDefaultMap ? defaultMap : null,
-            }
-            if (enableMarket) {
-                body.market_enabled      = true
-                body.market_admin_pubkey = walletPubkey
             }
 
             const response = await fetch(`${API_URL}/realms`, {
@@ -80,8 +47,6 @@ const CreateRealmModal: React.FC = () => {
 
             const data = await response.json()
             setRealmName('')
-            setWalletPubkey('')
-            setEnableMarket(false)
             revalidate('/app')
             setModal('None')
             toast.success('Your space has been created!')
@@ -92,7 +57,7 @@ const CreateRealmModal: React.FC = () => {
         setLoading(false)
     }
 
-    const canCreate = realmName.length > 0 && !loading && (!enableMarket || walletPubkey)
+    const canCreate = realmName.length > 0 && !loading
 
     return (
         <Modal open={modal === 'Create Realm'} closeOnOutsideClick>
@@ -114,45 +79,6 @@ const CreateRealmModal: React.FC = () => {
                         onChange={e => setUseDefaultMap(e.target.checked)}
                     />
                     <label htmlFor='useDefaultMap'>Use starter map</label>
-                </div>
-
-                {/* Prediction Market section */}
-                <div className='flex flex-col gap-3 w-[340px] border border-cyber-purple/40 p-4 rounded bg-dark-panel/60'>
-                    <div className='flex items-center gap-2'>
-                        <input
-                            type='checkbox' id='enableMarket'
-                            checked={enableMarket}
-                            onChange={handleEnableMarketToggle}
-                        />
-                        <label htmlFor='enableMarket' className='text-sm font-orbitron tracking-wide text-cyber-purple'>
-                            Enable Prediction Market
-                        </label>
-                    </div>
-
-                    {enableMarket && (
-                        <div className='flex flex-col gap-3'>
-                            <p className='text-xs text-gray-400'>
-                                Connect your Solana wallet. It will be the admin of this space&apos;s prediction market.
-                                You can deploy the market from the market page after creation.
-                            </p>
-                            {walletPubkey ? (
-                                <div className='flex flex-col gap-1'>
-                                    <p className='text-xs text-gray-400'>Admin wallet:</p>
-                                    <p className='text-xs font-mono text-neon-green break-all'>{walletPubkey}</p>
-                                    <button
-                                        onClick={() => setWalletPubkey('')}
-                                        className='text-xs text-gray-500 underline text-left'
-                                    >
-                                        Disconnect
-                                    </button>
-                                </div>
-                            ) : (
-                                <BasicButton onClick={connectWallet} disabled={connectingWallet} className='text-sm'>
-                                    {connectingWallet ? 'Connecting...' : 'Connect Wallet'}
-                                </BasicButton>
-                            )}
-                        </div>
-                    )}
                 </div>
 
                 <BasicButton

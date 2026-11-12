@@ -119,6 +119,8 @@ export default function VillageHUD() {
                     <button className={btnGhost} onClick={() => signal.emit('villageWalk')}>🚶 Market</button>
                     <button className={btnGhost} onClick={() => setBoard(true)}>📈 Board <kbd className='text-[10px] opacity-60'>M</kbd></button>
                     <button className={btnGhost} disabled={fastForward} onClick={fastForwardWeek}>⏩ 1 week</button>
+                    <button className={btnGhost} onClick={() => signal.emit('openMarkets')}>🎯 Predictions</button>
+                    <button className={btnGhost} onClick={() => signal.emit('openPool')}>🏦 Team pool</button>
                 </div>
             </div>
 

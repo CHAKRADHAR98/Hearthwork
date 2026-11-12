@@ -109,3 +109,20 @@ export async function verifyToken(token: string): Promise<AuthUser | null> {
 export function isAuthenticated(): boolean {
     return !!getToken()
 }
+
+/** Exchange a Google ID token for a Hearthwork session. The server creates the user (and their NEAR wallet) on first sign-in. */
+export async function loginWithGoogle(credential: string): Promise<AuthResponse> {
+    const response = await fetch(`${API_URL}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential }),
+    })
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Google sign-in failed')
+    }
+    const data = await response.json()
+    setCookie('token', data.token)
+    setCookie('user', JSON.stringify(data.user))
+    return data
+}

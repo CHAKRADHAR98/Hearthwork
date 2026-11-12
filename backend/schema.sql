@@ -19,37 +19,9 @@ CREATE TABLE IF NOT EXISTS realms (
     share_id VARCHAR(100) UNIQUE NOT NULL,
     map_data JSONB NOT NULL,
     only_owner BOOLEAN DEFAULT FALSE,
-    market_enabled BOOLEAN DEFAULT FALSE,
-    market_admin_pubkey VARCHAR(88),
-    market_pubkey VARCHAR(88),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
--- Migration: add market columns to existing realms table (safe to run on an existing DB)
-ALTER TABLE realms ADD COLUMN IF NOT EXISTS market_enabled BOOLEAN DEFAULT FALSE;
-ALTER TABLE realms ADD COLUMN IF NOT EXISTS market_admin_pubkey VARCHAR(88);
-ALTER TABLE realms ADD COLUMN IF NOT EXISTS market_pubkey VARCHAR(88);
-
--- Per-realm prediction markets table (supports multiple markets per realm)
-CREATE TABLE IF NOT EXISTS realm_markets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    realm_id UUID NOT NULL REFERENCES realms(id) ON DELETE CASCADE,
-    market_pubkey VARCHAR(88) NOT NULL UNIQUE,
-    market_name VARCHAR(50) NOT NULL,
-    deployed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_realm_markets_realm_id ON realm_markets(realm_id);
-
--- Migration: populate realm_markets from existing realms.market_pubkey (safe to run on existing DB)
-INSERT INTO realm_markets (realm_id, market_pubkey, market_name)
-SELECT id, market_pubkey, name || ' Market'
-FROM realms
-WHERE market_pubkey IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM realm_markets rm WHERE rm.market_pubkey = realms.market_pubkey
-  );
 
 -- Visited realms table (replaces Supabase profiles.visited_realms)
 CREATE TABLE IF NOT EXISTS visited_realms (
@@ -80,3 +52,10 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
 
 CREATE TRIGGER update_realms_updated_at BEFORE UPDATE ON realms
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Cleanup: remove columns/tables left over from the old on-chain prediction-market flow (idempotent)
+ALTER TABLE realms DROP COLUMN IF EXISTS market_enabled;
+ALTER TABLE realms DROP COLUMN IF EXISTS market_admin_pubkey;
+ALTER TABLE realms DROP COLUMN IF EXISTS market_pubkey;
+DROP INDEX IF EXISTS idx_realm_markets_realm_id;
+DROP TABLE IF EXISTS realm_markets;

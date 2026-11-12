@@ -39,9 +39,6 @@ export default async function Manage({ params }: { params: { id: string } }) {
                 startingShareId={realm.share_id}
                 startingOnlyOwner={realm.only_owner}
                 startingName={realm.name}
-                marketEnabled={realm.market_enabled ?? false}
-                marketAdminPubkey={realm.market_admin_pubkey ?? null}
-                marketPubkey={realm.market_pubkey ?? null}
             />
         </div>
     )

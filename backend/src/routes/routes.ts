@@ -93,22 +93,6 @@ export default function routes(): Router {
         return res.json({ playerCounts })
     })
 
-    // Get all realms with prediction markets enabled
-    router.get('/realms/markets', async (_req, res) => {
-        try {
-            const result = await pool.query(
-                `SELECT id, name, share_id, market_pubkey
-                 FROM realms
-                 WHERE market_enabled = true
-                 ORDER BY name ASC`
-            )
-            return res.json({ realms: result.rows })
-        } catch (error) {
-            console.error('Error fetching markets:', error)
-            return res.status(500).json({ message: 'Failed to fetch markets' })
-        }
-    })
-
     // Get owned realms
     router.get('/realms/owned', async (req, res) => {
         const userId = req.query.userId as string
@@ -157,7 +141,7 @@ export default function routes(): Router {
 
         try {
             const result = await pool.query(
-                'SELECT id, name, map_data, owner_id, share_id, only_owner, market_enabled, market_admin_pubkey, market_pubkey FROM realms WHERE id = $1',
+                'SELECT id, name, map_data, owner_id, share_id, only_owner FROM realms WHERE id = $1',
                 [realmId]
             )
 
@@ -235,34 +219,17 @@ export default function routes(): Router {
     // Create new realm
     router.post('/realms', authenticate, async (req: AuthenticatedRequest, res: Response) => {
         const userId = req.user?.userId
-        const { name, map_data, market_enabled, market_admin_pubkey, market_pubkey } = req.body
+        const { name, map_data } = req.body
 
         if (!name || typeof name !== 'string') {
             return res.status(400).json({ message: 'Realm name required' })
         }
 
-        // Validate market fields when market is being enabled
-        const enableMarket = market_enabled === true
-        if (enableMarket) {
-            if (!market_admin_pubkey || typeof market_admin_pubkey !== 'string') {
-                return res.status(400).json({ message: 'market_admin_pubkey is required when market_enabled is true' })
-            }
-            // Basic base58 length check for Solana public keys (32–44 chars)
-            if (market_admin_pubkey.length < 32 || market_admin_pubkey.length > 44) {
-                return res.status(400).json({ message: 'Invalid Solana public key' })
-            }
-            if (market_pubkey && (market_pubkey.length < 32 || market_pubkey.length > 44)) {
-                return res.status(400).json({ message: 'Invalid market_pubkey' })
-            }
-        }
-
         try {
             const shareId = crypto.randomUUID()
             const result = await pool.query(
-                'INSERT INTO realms (owner_id, name, share_id, map_data, market_enabled, market_admin_pubkey, market_pubkey) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-                [userId, name, shareId, map_data || null, enableMarket,
-                    enableMarket ? market_admin_pubkey : null,
-                    enableMarket && market_pubkey ? market_pubkey : null]
+                'INSERT INTO realms (owner_id, name, share_id, map_data) VALUES ($1, $2, $3, $4) RETURNING *',
+                [userId, name, shareId, map_data || null]
             )
             return res.status(201).json({ realm: result.rows[0] })
         } catch (error) {
@@ -353,107 +320,6 @@ export default function routes(): Router {
         } catch (error) {
             console.error('Error updating realm:', error)
             return res.status(500).json({ message: 'Failed to update realm' })
-        }
-    })
-
-    // List all deployed markets for a realm
-    router.get('/realms/:id/markets', async (req, res) => {
-        const realmId = req.params.id
-        try {
-            const result = await pool.query(
-                `SELECT rm.market_pubkey, rm.market_name, rm.deployed_at
-                 FROM realm_markets rm
-                 JOIN realms r ON r.id = rm.realm_id
-                 WHERE rm.realm_id = $1
-                 ORDER BY rm.deployed_at ASC`,
-                [realmId]
-            )
-            return res.json({ markets: result.rows })
-        } catch (error) {
-            console.error('Error fetching realm markets:', error)
-            return res.status(500).json({ message: 'Failed to fetch markets' })
-        }
-    })
-
-    // Add a newly deployed market to a realm
-    router.post('/realms/:id/markets', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-        const userId  = req.user?.userId
-        const realmId = req.params.id
-        const { market_pubkey, market_name } = req.body
-
-        if (!market_pubkey || typeof market_pubkey !== 'string')
-            return res.status(400).json({ message: 'market_pubkey required' })
-        if (!market_name || typeof market_name !== 'string')
-            return res.status(400).json({ message: 'market_name required' })
-        if (market_pubkey.length < 32 || market_pubkey.length > 44)
-            return res.status(400).json({ message: 'Invalid Solana public key' })
-
-        try {
-            const checkResult = await pool.query(
-                'SELECT owner_id, market_enabled FROM realms WHERE id = $1',
-                [realmId]
-            )
-            if (checkResult.rows.length === 0)
-                return res.status(404).json({ message: 'Realm not found' })
-            if (checkResult.rows[0].owner_id !== userId)
-                return res.status(403).json({ message: 'Not authorized' })
-            if (!checkResult.rows[0].market_enabled)
-                return res.status(400).json({ message: 'Market is not enabled for this realm' })
-
-            await pool.query(
-                'INSERT INTO realm_markets (realm_id, market_pubkey, market_name) VALUES ($1, $2, $3)',
-                [realmId, market_pubkey, market_name.slice(0, 50)]
-            )
-            return res.json({ message: 'Market added successfully', market_pubkey })
-        } catch (error: any) {
-            if (error.code === '23505')
-                return res.status(409).json({ message: 'This market pubkey is already registered' })
-            console.error('Error adding realm market:', error)
-            return res.status(500).json({ message: 'Failed to add market' })
-        }
-    })
-
-    // Store the on-chain market account pubkey for a realm (called after create_market tx succeeds)
-    router.put('/realms/:id/market', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-        const userId = req.user?.userId
-        const realmId = req.params.id
-        const { market_pubkey } = req.body
-
-        if (!market_pubkey || typeof market_pubkey !== 'string') {
-            return res.status(400).json({ message: 'market_pubkey required' })
-        }
-
-        if (market_pubkey.length < 32 || market_pubkey.length > 44) {
-            return res.status(400).json({ message: 'Invalid Solana public key' })
-        }
-
-        try {
-            const checkResult = await pool.query(
-                'SELECT owner_id, market_enabled FROM realms WHERE id = $1',
-                [realmId]
-            )
-
-            if (checkResult.rows.length === 0) {
-                return res.status(404).json({ message: 'Realm not found' })
-            }
-
-            if (checkResult.rows[0].owner_id !== userId) {
-                return res.status(403).json({ message: 'Not authorized to update this realm' })
-            }
-
-            if (!checkResult.rows[0].market_enabled) {
-                return res.status(400).json({ message: 'Market is not enabled for this realm' })
-            }
-
-            await pool.query(
-                'UPDATE realms SET market_pubkey = $1 WHERE id = $2',
-                [market_pubkey, realmId]
-            )
-
-            return res.json({ message: 'Market pubkey saved successfully' })
-        } catch (error) {
-            console.error('Error saving market pubkey:', error)
-            return res.status(500).json({ message: 'Failed to save market pubkey' })
         }
     })
 

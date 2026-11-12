@@ -6,11 +6,9 @@
     "start": "next start"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "^0.32.1",
     "@headlessui/react": "^1.7.19",
     "@heroicons/react": "^2.1.4",
     "@phosphor-icons/react": "^2.1.5",
-    "@solana/web3.js": "^1.98.4",
     "agora-rtc-react": "^2.3.0",
     "agora-rtc-sdk-ng": "^4.22.1",
     "agora-token": "^2.0.3",

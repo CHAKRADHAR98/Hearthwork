@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import BasicInput from '@/components/BasicInput'
 import { toast } from 'react-toastify'
+import GoogleSignIn from '@/components/Auth/GoogleSignIn'
 
 export default function Register() {
     const [username, setUsername] = useState('')
@@ -60,6 +61,8 @@ export default function Register() {
                         <h1 className='font-orbitron font-bold text-2xl tracking-wider text-white'>REGISTRATION</h1>
                         <div className='w-full h-px bg-gradient-to-r from-cyber-cyan/50 to-transparent mt-1' />
                     </div>
+
+                    <GoogleSignIn />
 
                     <form onSubmit={handleRegister} className='flex flex-col gap-5'>
                         <div>
