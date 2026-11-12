@@ -9,9 +9,11 @@
     "@headlessui/react": "^1.7.19",
     "@heroicons/react": "^2.1.4",
     "@phosphor-icons/react": "^2.1.5",
+    "@remotion/player": "^4.0.543",
     "agora-rtc-react": "^2.3.0",
     "agora-rtc-sdk-ng": "^4.22.1",
     "agora-token": "^2.0.3",
+    "animejs": "^4.5.0",
     "autoprefixer": "10.4.17",
     "geist": "^1.2.1",
     "gsap": "^3.12.5",
@@ -21,6 +23,7 @@
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-toastify": "^10.0.5",
+    "remotion": "^4.0.543",
     "server-only": "^0.0.1",
     "socket.io-client": "^4.7.5",
     "tailwindcss": "3.4.1",
@@ -34,6 +37,7 @@
     "@types/react": "18.2.48",
     "@types/react-dom": "18.2.18",
     "@types/uuid": "^9.0.8",
-    "encoding": "^0.1.13"
+    "encoding": "^0.1.13",
+    "svgo": "^4.1.0"
   }
 }

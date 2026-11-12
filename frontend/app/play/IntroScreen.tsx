@@ -18,10 +18,11 @@ const IntroScreen:React.FC<IntroScreenProps> = ({ realmName, skin, username, set
 
     return (
         <main className='dark-gradient w-full h-screen flex flex-col items-center pt-28'>
-            <h1 className='text-4xl font-semibold'>Welcome to <span className='text-[#CAD8FF]'>{realmName}</span></h1>
-            <section className='flex flex-row mt-32 items-center gap-24'>
+            <h1 className='font-pixel text-4xl text-center px-4'>Welcome to <span className='text-hearth-honey'>{realmName}</span></h1>
+            <p className='mt-2 text-hearth-sand text-center px-4'>Check your camera, then step inside. The Market Square is just north of the entrance.</p>
+            <section className='flex flex-col md:flex-row mt-16 md:mt-24 items-center gap-10 md:gap-24'>
                 <div className='flex flex-col items-center gap-4'>
-                    <div className='aspect-video w-[337px] h-[227px] bg-black rounded-xl border-2 border-[#3F4776] overflow-hidden'>
+                    <div className='aspect-video w-[337px] h-[227px] bg-black rounded-xl border-2 border-hearth-line overflow-hidden'>
                         <LocalVideo/>
                     </div>
                     <MicAndCameraButtons/>

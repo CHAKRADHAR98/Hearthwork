@@ -1,6 +1,7 @@
 'use client'
 import React, { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
+import { useModal } from '@/app/hooks/useModal'
 import BasicButton from '@/components/BasicButton'
 import DesktopRealmItem from './DesktopRealmItem'
 import { useRouter } from 'next/navigation'
@@ -23,6 +24,7 @@ type RealmsMenuProps = {
 const RealmsMenu:React.FC<RealmsMenuProps> = ({ realms, errorMessage }) => {
 
     const [selectedRealm, setSelectedRealm] = useState<Realm | null>(null)
+    const { setModal } = useModal()
     const [playerCounts, setPlayerCounts] = useState<number[]>([])
     const router = useRouter()
 
@@ -59,9 +61,7 @@ const RealmsMenu:React.FC<RealmsMenuProps> = ({ realms, errorMessage }) => {
             {/* Mobile View */}
             <div className='flex flex-col items-center p-4 gap-2 sm:hidden'>
                 {realms.length === 0 && (
-                    <p className='text-center text-gray-600 font-orbitron text-xs tracking-wider uppercase mt-8'>
-                        No spaces found. Create one on desktop to get started.
-                    </p>
+                    <p className='text-center text-hearth-sand mt-8'>No offices yet. Tap “New office” above to create one.</p>
                 )}
                 {realms.map((realm, index) => {
                     function selectRealm() {
@@ -89,7 +89,7 @@ const RealmsMenu:React.FC<RealmsMenuProps> = ({ realms, errorMessage }) => {
                 })}
                 <div className='fixed bottom-0 w-full bg-dark-panel border-t border-panel-border grid place-items-center p-3'>
                     <BasicButton className='w-[90%]' disabled={selectedRealm === null} onClick={() => router.push(getLink())}>
-                        Enter Space
+                        Enter office
                     </BasicButton>
                 </div>
             </div>
@@ -98,8 +98,10 @@ const RealmsMenu:React.FC<RealmsMenuProps> = ({ realms, errorMessage }) => {
             <div className='flex-col items-center w-full p-8 hidden sm:flex'>
                 {realms.length === 0 && (
                     <div className='flex flex-col items-center gap-3 mt-16'>
-                        <p className='text-gray-600 font-orbitron text-xs tracking-[0.3em] uppercase'>No spaces detected</p>
-                        <p className='text-gray-700 text-sm'>Create a space to get started.</p>
+                        <p className='text-5xl' aria-hidden>🏡</p>
+                        <p className='font-pixel text-2xl text-hearth-parchment'>No offices yet</p>
+                        <p className='text-hearth-sand'>Create one: it comes with a Market Square, five shopkeepers and a team pool.</p>
+                        <BasicButton className='mt-2' onClick={() => setModal('Create Realm')}>Create your first office</BasicButton>
                     </div>
                 )}
                 <div className='hidden sm:grid grid-cols-2 md:grid-cols-3 gap-6 w-full'>

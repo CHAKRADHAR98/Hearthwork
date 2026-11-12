@@ -48,8 +48,8 @@ export default function GoogleSignIn() {
     return (
         <div className='flex flex-col items-center gap-2'>
             <div ref={ref} />
-            <p className='text-[11px] text-gray-500 text-center'>No wallet or seed phrase needed: we create a NEAR account for you.</p>
-            <div className='flex items-center gap-2 w-full text-gray-600 text-xs'><span className='flex-1 h-px bg-gray-700' />or<span className='flex-1 h-px bg-gray-700' /></div>
+            <p className='text-xs text-hearth-sand text-center'>No wallet or seed phrase needed: we create a NEAR account for you.</p>
+            <div className='flex items-center gap-3 w-full my-3 text-hearth-sand text-sm'><span className='flex-1 h-px bg-hearth-line' />or<span className='flex-1 h-px bg-hearth-line' /></div>
         </div>
     )
 }

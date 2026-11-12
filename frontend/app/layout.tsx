@@ -1,16 +1,17 @@
-import { DM_Sans, Orbitron } from 'next/font/google'
+import { Nunito, Pixelify_Sans } from 'next/font/google'
 import "./globals.css";
 import Layout from '@/components/Layout/Layout'
 
-const dmSans = DM_Sans({
+const nunito = Nunito({
     subsets: ['latin'],
-    weight: ['400', '500', '600', '700'],
+    weight: ['400', '500', '600', '700', '800'],
+    variable: '--font-body',
 })
 
-const orbitron = Orbitron({
+const pixel = Pixelify_Sans({
     subsets: ['latin'],
-    weight: ['400', '500', '600', '700', '800', '900'],
-    variable: '--font-orbitron',
+    weight: ['400', '500', '600', '700'],
+    variable: '--font-pixel',
 })
 
 const defaultUrl = process.env.VERCEL_URL
@@ -34,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${dmSans.className} ${orbitron.variable}`}>
+    <html lang="en" className={`${nunito.className} ${nunito.variable} ${pixel.variable}`}>
       <body>
         <Layout>
             {children}

@@ -49,7 +49,7 @@ const CreateRealmModal: React.FC = () => {
             setRealmName('')
             revalidate('/app')
             setModal('None')
-            toast.success('Your space has been created!')
+            toast.success('Your office is ready!')
             router.push(`/editor/${data.realm.id}`)
         } catch {
             toast.error('Failed to create realm')
@@ -62,10 +62,11 @@ const CreateRealmModal: React.FC = () => {
     return (
         <Modal open={modal === 'Create Realm'} closeOnOutsideClick>
             <div className='flex flex-col items-center p-4 w-[420px] gap-4'>
-                <h1 className='text-2xl'>Create a Space</h1>
+                <h1 className='font-pixel text-3xl'>Create an office</h1>
+                <p className='text-sm text-hearth-sand -mt-2 text-center'>Comes with a Market Square, five shopkeepers, prediction markets and a team pool.</p>
 
                 <BasicInput
-                    label='Space Name'
+                    label='Office name'
                     className='w-[340px]'
                     value={realmName}
                     onChange={e => setRealmName(removeExtraSpaces(e.target.value))}
@@ -86,7 +87,7 @@ const CreateRealmModal: React.FC = () => {
                     onClick={createRealm}
                     className='text-lg w-[340px]'
                 >
-                    {loading ? 'Creating...' : 'Create Space'}
+                    {loading ? 'Creating...' : 'Create office'}
                 </BasicButton>
             </div>
         </Modal>

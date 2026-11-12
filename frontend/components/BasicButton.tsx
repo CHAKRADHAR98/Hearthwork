@@ -13,7 +13,8 @@ const BasicButton:React.FC<BasicButtonProps> = ({ children, className, onClick, 
     return (
         <button
             type={type}
-            className={`relative bg-transparent border border-cyber-cyan text-cyber-cyan font-semibold text-sm py-3 px-6 rounded-sm transition-all duration-300 hover:bg-cyber-cyan/10 hover:shadow-[0_0_20px_rgba(0,245,255,0.4)] active:scale-95 tracking-widest uppercase ${disabled ? 'pointer-events-none opacity-40 border-gray-600 text-gray-600' : ''} ${className}`}
+            disabled={disabled}
+            className={`relative inline-flex items-center justify-center bg-hearth-honey text-hearth-ink font-bold text-sm py-2.5 px-5 rounded-xl shadow-[0_4px_0_#7a5a16] transition-[transform,box-shadow,background-color] hover:bg-[#ecc95a] active:translate-y-[2px] active:shadow-[0_2px_0_#7a5a16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hearth-parchment disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
             onClick={onClick}
         >
             {children}

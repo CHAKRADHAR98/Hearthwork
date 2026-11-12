@@ -31,7 +31,7 @@ export const NavbarChild:React.FC<NavbarChildProps> = ({ name, avatar_url }) => 
                     </Link>
                     <div className='hidden sm:flex flex-row items-center gap-3 ml-4'>
                         <BasicButton onClick={() => setModal('Create Realm')} className='flex flex-row items-center gap-2 py-2 text-xs'>
-                            Create Space
+                            New office
                             <PlusCircleIcon className='h-4'/>
                         </BasicButton>
                     </div>

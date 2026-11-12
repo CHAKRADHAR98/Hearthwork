@@ -11,51 +11,22 @@ html {
 /* --- Cyber / Sci-fi Effects --- */
 
 .cyber-bg {
-    background-color: #0A0B0F;
+    /* warm night-sky backdrop with soft lantern glow and a fine pixel dot grid */
+    background-color: #1a1510;
     background-image:
-        linear-gradient(rgba(0, 245, 255, 0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0, 245, 255, 0.04) 1px, transparent 1px);
-    background-size: 40px 40px;
+        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255, 138, 61, 0.10), transparent 70%),
+        radial-gradient(rgba(224, 185, 58, 0.07) 1px, transparent 1px);
+    background-size: 100% 100%, 22px 22px;
 }
 
-.cyber-glow {
-    box-shadow: 0 0 10px rgba(0, 245, 255, 0.3), 0 0 30px rgba(0, 245, 255, 0.15);
-}
+.cyber-glow { box-shadow: 0 0 0 1px rgba(224, 185, 58, 0.25), 0 8px 30px rgba(0, 0, 0, 0.35); }
+.cyber-glow-purple { box-shadow: 0 0 0 1px rgba(224, 122, 79, 0.35), 0 8px 30px rgba(0, 0, 0, 0.35); }
+.cyber-glow-green { box-shadow: 0 0 0 1px rgba(147, 196, 125, 0.35), 0 8px 30px rgba(0, 0, 0, 0.35); }
+.text-glow-cyan { text-shadow: 0 2px 0 #7a4b16, 0 0 24px rgba(255, 138, 61, 0.35); }
+.text-glow-green { text-shadow: 0 2px 0 #3d5a2c; }
 
-.cyber-glow-purple {
-    box-shadow: 0 0 10px rgba(153, 69, 255, 0.4), 0 0 30px rgba(153, 69, 255, 0.2);
-}
-
-.cyber-glow-green {
-    box-shadow: 0 0 10px rgba(20, 241, 149, 0.4), 0 0 30px rgba(20, 241, 149, 0.2);
-}
-
-.text-glow-cyan {
-    text-shadow: 0 0 10px rgba(0, 245, 255, 0.8), 0 0 20px rgba(0, 245, 255, 0.4);
-}
-
-.text-glow-green {
-    text-shadow: 0 0 10px rgba(20, 241, 149, 0.8), 0 0 20px rgba(20, 241, 149, 0.4);
-}
-
-/* Scanlines overlay */
-.scanlines {
-    position: relative;
-}
-.scanlines::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 3px,
-        rgba(0, 0, 0, 0.04) 3px,
-        rgba(0, 0, 0, 0.04) 4px
-    );
-    pointer-events: none;
-    z-index: 1;
-}
+/* the old CRT scanlines are gone: keep the class as a harmless no-op */
+.scanlines { position: relative; }
 
 /* Cyber corner bracket decoration */
 .cyber-corners {
@@ -168,16 +139,16 @@ input[type=number]::-webkit-outer-spin-button {
 
 
 .gradient {
-    background-image: linear-gradient(135deg, #9945FF 0%, #14F195 100%);
+    background-image: linear-gradient(135deg, #e0b93a 0%, #ff8a3d 100%);
 }
 
 
 .dark-gradient {
     background-image: linear-gradient(
         180deg, 
-        #0D0E12 0%,      /* Deep Black */
-        #1A1B23 45%,     /* Dark Slate */
-        #241A35 100%     /* Very deep purple hint at the bottom */
+        #151a2b 0%,      /* night */
+        #1f1913 55%,     /* hearth ink */
+        #2a2119 100%     /* bark */
     );
 }
 
@@ -197,3 +168,14 @@ input[type=number]::-webkit-outer-spin-button {
     from { transform: translateY(0); }
     to { transform: translateY(-100%); }
 }
+/* --- Hearthwork --- */
+:root { color-scheme: dark; }
+body { background: #1a1510; color: #f6ead2; }
+.pixelated { image-rendering: pixelated; }
+::selection { background: #e0b93a; color: #1f1913; }
+@media (prefers-reduced-motion: no-preference) {
+    .hw-bob { animation: hw-bob 2.4s ease-in-out infinite; }
+}
+@keyframes hw-bob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

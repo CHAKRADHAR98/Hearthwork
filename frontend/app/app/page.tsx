@@ -31,11 +31,8 @@ export default async function App() {
         <div className='min-h-screen cyber-bg'>
             <Navbar />
             <div className='pt-8 px-4 sm:px-8'>
-                <div className='flex items-center gap-3'>
-                    <span className='text-cyber-cyan font-orbitron text-xs tracking-[0.4em] opacity-60'>&gt;</span>
-                    <h1 className='font-orbitron font-bold text-2xl tracking-wider text-white'>YOUR SPACES</h1>
-                </div>
-                <div className='w-48 h-px bg-gradient-to-r from-cyber-cyan/50 to-transparent mt-2' />
+                <h1 className='font-pixel text-3xl text-hearth-parchment'>Your offices</h1>
+                <p className='text-hearth-sand mt-1'>Each office has its own Market Square, prediction markets and team pool.</p>
             </div>
             <RealmsMenu realms={realms} errorMessage=''/>
         </div>
