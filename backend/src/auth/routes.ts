@@ -9,12 +9,7 @@ import { villageManager } from '../village/manager'
 
 const googleClient = new OAuth2Client()
 
-// Google sign-in: users may have no password. Runs once at startup, safe to repeat.
-pool.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(64) UNIQUE;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-    ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
-`).catch(e => console.error('[auth] migration failed', e.message))
+// Google sign-in columns (google_sub, email, nullable password) are created by schema.sql at startup.
 
 async function uniqueUsername(base: string) {
     const clean = base.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20) || 'villager'

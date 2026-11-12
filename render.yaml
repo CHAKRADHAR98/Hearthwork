@@ -1,0 +1,33 @@
+# Render blueprint for the Hearthwork game server (the website goes on Vercel, the database on Neon).
+# Render dashboard → New → Blueprint → pick this repo. Values marked `sync: false` are asked for once
+# and stored as secrets in Render (never commit them).
+services:
+  - type: web
+    name: hearthwork-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NEAR_ROOT_ACCOUNT
+        value: hearthwork.testnet
+      - key: NEAR_NETWORK
+        value: testnet
+      - key: DATABASE_URL # Neon connection string (postgresql://...?sslmode=require)
+        sync: false
+      - key: NEAR_PRIVATE_KEY # ed25519:... key of NEAR_ROOT_ACCOUNT
+        sync: false
+      - key: FRONTEND_URL # your Vercel URL, e.g. https://hearthwork.vercel.app (comma-separate several)
+        sync: false
+      - key: NEARAI_API_KEY # optional: AI shopkeepers
+        sync: false
+      - key: GOOGLE_CLIENT_ID # optional: Google sign-in
+        sync: false

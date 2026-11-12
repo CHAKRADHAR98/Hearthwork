@@ -1,5 +1,5 @@
--- Database Schema for Gather Clone
--- Run this SQL to set up your PostgreSQL database
+-- Database schema for Hearthwork
+-- The backend runs this file on every start (every statement is idempotent), so a fresh database sets itself up.
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
@@ -47,9 +47,11 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_realms_updated_at ON realms;
 CREATE TRIGGER update_realms_updated_at BEFORE UPDATE ON realms
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -59,3 +61,15 @@ ALTER TABLE realms DROP COLUMN IF EXISTS market_admin_pubkey;
 ALTER TABLE realms DROP COLUMN IF EXISTS market_pubkey;
 DROP INDEX IF EXISTS idx_realm_markets_realm_id;
 DROP TABLE IF EXISTS realm_markets;
+
+-- Google sign-in: users may have no password
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(64) UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+
+-- Village game state (player wallets, each office's economy). Small JSON documents, loaded into memory at startup.
+CREATE TABLE IF NOT EXISTS game_state (
+    key VARCHAR(100) PRIMARY KEY,
+    data JSONB NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

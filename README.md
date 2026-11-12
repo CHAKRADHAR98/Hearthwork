@@ -74,6 +74,8 @@ ROOT=<you>.testnet ./scripts/deploy-contracts.sh       # builds, deploys and ini
 
 Optional: set `NEARAI_API_KEY` (AI shopkeepers) and `GOOGLE_CLIENT_ID` (Google sign-in) in `backend/.env`.
 
+**Deploying:** see [DEPLOY.md](DEPLOY.md) (Vercel + Render + Neon, all free tiers). Game state is stored in Postgres (`game_state` table), and the server creates its tables on first start.
+
 ## Try it (do X → see Y)
 
 1. Open http://localhost:3000, register (or **Continue with Google**), click **Create Space**, then **Join** the office.

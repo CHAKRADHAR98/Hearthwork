@@ -815,6 +815,30 @@ export class Village {
         }
     }
 
+    /**
+     * Shop coins and stock are kept both here and in the wallets (which are mirrored on-chain).
+     * The wallets are the source of truth: copy them into the shop state. A shop that has no wallet
+     * entry yet (e.g. the wallets were reset) gets one from its saved state instead.
+     */
+    reconcileWithWallets() {
+        for (const def of SHOPS) {
+            const s = this.shops[def.id]
+            if (!s) continue
+            const acct = this.shopAccount(def.id)
+            const bal = this.wallets.balances[acct]
+            if (!bal || Object.keys(bal).length === 0) {
+                if (s.coins > 0) this.wallets.credit(acct, COIN, s.coins)
+                for (const [g, q] of Object.entries(s.stock)) if (q && q > 0) this.wallets.credit(acct, g, q)
+                continue
+            }
+            s.coins = bal[COIN] ?? 0
+            const stock: Inventory = {}
+            for (const [t, q] of Object.entries(bal)) if (t !== COIN && q > 0) (stock as any)[t] = q
+            s.stock = stock
+            s.reserved = Math.min(s.reserved, s.coins)
+        }
+    }
+
     static fromJSON(realmId: string, wallets: Wallets, snap: VillageSnapshot): Village {
         const v = Object.create(Village.prototype) as Village
         Object.assign(v, {

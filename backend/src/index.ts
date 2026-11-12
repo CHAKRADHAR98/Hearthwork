@@ -1,4 +1,4 @@
-require('dotenv').config({ override: true })
+require('dotenv').config() // real environment variables (e.g. on Render) win over .env
 
 import express from 'express'
 import cors from 'cors'
@@ -10,12 +10,16 @@ import { authRoutes } from './auth/routes'
 import { sessionManager } from './session'
 import pool from './db'
 import { villageManager } from './village/manager'
+import { migrate } from './storage'
 
 const app = express()
 const server = http.createServer(app)
 
+// FRONTEND_URL may list several origins, comma-separated (e.g. the Vercel URL and http://localhost:3000)
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000').split(',').map(s => s.trim()).filter(Boolean)
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL
+    origin: allowedOrigins
 }))
 
 app.use(express.json({ limit: '50mb' }))
@@ -23,7 +27,7 @@ app.use(express.json({ limit: '50mb' }))
 // Initialize Socket.IO server
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.FRONTEND_URL
+    origin: allowedOrigins
   }
 })
 
@@ -37,7 +41,6 @@ app.use('/auth', authRoutes())
 app.use(routes())
 
 sockets(io)
-villageManager.init(io)
 
 async function onRealmUpdate(realmId: string) {
     const client = await pool.connect()
@@ -57,10 +60,25 @@ async function onRealmDelete(realmId: string) {
 }
 
 const PORT = process.env.PORT || 3001
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { villageManager.save(); process.exit(0) })
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(sig, async () => {
+        // hosts send SIGTERM before a restart or redeploy: save the game first
+        await villageManager.save()
+        process.exit(0)
+    })
+}
 
-server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}.`)
+async function start() {
+    await migrate()
+    await villageManager.init(io)
+    server.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}.`)
+    })
+}
+
+start().catch(e => {
+    console.error('Failed to start:', e)
+    process.exit(1)
 })
 
 export { io }

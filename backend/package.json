@@ -7,8 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node ./dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "heroku-postbuild": "npm run build",
+    "build": "tsc -p .",
     "sim": "tsx src/village/sim.ts",
     "check:features": "tsx scripts/features-check.ts"
   },
@@ -39,5 +38,8 @@
     "socket.io": "^4.7.5",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
