@@ -111,23 +111,31 @@ export class VideoChat {
 
         this.channelTimeout = setTimeout(async () => {
             if (channel === this.currentChannel) return
-            const uniqueChannelId = this.createUniqueChannelId(realmId, channel)
-            const token = await generateToken(uniqueChannelId)
-            if (!token) return
+            try {
+                const uniqueChannelId = this.createUniqueChannelId(realmId, channel)
+                // the token is issued for this exact account string (see generateToken)
+                const token = await generateToken(uniqueChannelId, uid)
+                if (!token) {
+                    console.warn('[video] no call token (video chat is not configured)')
+                    return
+                }
 
-            if (this.client.connectionState === 'CONNECTED') {
-                await this.client.leave()
-            }
-            this.resetRemoteUsers()
+                if (this.client.connectionState === 'CONNECTED') {
+                    await this.client.leave()
+                }
+                this.resetRemoteUsers()
 
-            await this.client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, uniqueChannelId, token, uid)
-            this.currentChannel = channel
+                await this.client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, uniqueChannelId, token, uid)
+                this.currentChannel = channel
 
-            if (this.microphoneTrack && this.microphoneTrack.enabled) {
-                await this.client.publish([this.microphoneTrack])
-            }
-            if (this.cameraTrack && this.cameraTrack.enabled) {
-                await this.client.publish([this.cameraTrack])
+                if (this.microphoneTrack && this.microphoneTrack.enabled) {
+                    await this.client.publish([this.microphoneTrack])
+                }
+                if (this.cameraTrack && this.cameraTrack.enabled) {
+                    await this.client.publish([this.cameraTrack])
+                }
+            } catch (e) {
+                console.error('[video] could not join the call', e)
             }
         }, 1000)
     }
