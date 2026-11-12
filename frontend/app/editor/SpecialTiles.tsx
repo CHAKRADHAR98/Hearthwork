@@ -1,7 +1,7 @@
 import React from 'react'
 import SpecialTileItem from './SpecialTileItem'
 import { SpecialTile } from '@/utils/pixi/types'
-import { Placeholder, FlyingSaucer, Tree, Desk, ChartLineUp, CurrencyDollar } from '@phosphor-icons/react'
+import { Placeholder, FlyingSaucer, Tree, Desk, ChartLineUp, CurrencyDollar, Storefront } from '@phosphor-icons/react'
 
 type SpecialTilesProps = {
     specialTile: SpecialTile
@@ -43,6 +43,14 @@ const SpecialTiles:React.FC<SpecialTilesProps> = ({ specialTile, selectSpecialTi
                 selected={specialTile === 'Spawn'}
                 onClick={() => selectSpecialTile('Spawn')}>
                 <Tree className='w-12 h-12'/>
+            </SpecialTileItem>
+            <SpecialTileItem
+                iconColor='yellow'
+                title='Market Square'
+                description='The entrance to the village game. Players who step here go to the Market Square and its five AI shopkeepers.'
+                selected={specialTile === 'Village'}
+                onClick={() => selectSpecialTile('Village')}>
+                <Storefront className='w-12 h-12'/>
             </SpecialTileItem>
             <SpecialTileItem
                 iconColor='purple'

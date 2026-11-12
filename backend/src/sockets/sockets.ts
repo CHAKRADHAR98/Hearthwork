@@ -9,6 +9,7 @@ import { kickPlayer } from './helpers'
 import { verifyToken } from '../auth/jwt'
 import { villageManager } from '../village/manager'
 import { attachFinance } from '../finance/finance'
+import { withMarketSquare } from '../village/marketRoom'
 
 const joiningInProgress = new Set<string>()
 
@@ -148,7 +149,7 @@ export function sockets(io: Server) {
 
                 const join = async () => {
                     if (!sessionManager.getSession(realmData.realmId)) {
-                        sessionManager.createSession(realmData.realmId, realm.map_data)
+                        sessionManager.createSession(realmData.realmId, withMarketSquare(realm.map_data))
                     }
 
                     const currentSession = sessionManager.getPlayerSession(uid)

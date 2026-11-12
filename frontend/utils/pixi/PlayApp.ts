@@ -6,8 +6,8 @@ import { server } from '../backend/server'
 import { defaultSkin } from './Player/skins'
 import signal from '../signal'
 import { gsap } from 'gsap'
-import { VillageLayer } from './village/VillageLayer'
-import { VILLAGE_NPCS } from '../village/data'
+import { drawEntrances, VillageLayer } from './village/VillageLayer'
+import { MARKET_ORIGIN, MARKET_ROOM, VILLAGE_NPCS } from '../village/data'
 
 export class PlayApp extends App {
     private scale: number = 1.5
@@ -46,10 +46,15 @@ export class PlayApp extends App {
         this.setUpBlockedTiles()
         this.setUpFadeTiles()
         this.spawnLocalPlayer()
-        if (index === this.realmData.spawnpoint.roomIndex) {
-            // The Market Square lives in the office's main room.
+        const room = this.realmData.rooms[index]
+        if (room.name === MARKET_ROOM) {
+            // The Market Square is its own generated room (see backend/src/village/marketRoom.ts).
+            const exit = Object.entries(room.tilemap).find(([, t]) => t.teleporter)?.[0]
+            const [ex, ey] = exit ? exit.split(',').map(Number) : [12, 16]
             this.village = new VillageLayer(this, this.layers.above_floor, this.layers.object)
-            await this.village.mount(VILLAGE_NPCS, this.realmData.spawnpoint)
+            await this.village.mount(VILLAGE_NPCS, MARKET_ORIGIN, this.realmData.spawnpoint, { x: ex, y: ey })
+        } else {
+            drawEntrances(this.layers.above_floor, this.villageEntrances(index))
         }
         await this.syncOtherPlayers()
         this.displayInitialChatMessage()
@@ -372,7 +377,20 @@ export class PlayApp extends App {
 
     private onVillageSay = (m: { shopId: string, text: string }) => this.village?.say(m.shopId, m.text)
     private onVillageShops = (shops: { id: string, open: boolean }[]) => this.village?.updateShops(VILLAGE_NPCS.map(n => ({ ...n, open: shops.find(s => s.id === n.id)?.open ?? true })))
-    private onVillageWalk = () => this.village?.walkHere()
+    /** Market Square entrance tiles in a room. */
+    public villageEntrances(index = this.currentRoomIndex) {
+        return Object.entries(this.realmData.rooms[index].tilemap)
+            .filter(([, t]) => (t as any).villageId)
+            .map(([k]) => { const [x, y] = k.split(',').map(Number); return { x, y } })
+    }
+
+    private onVillageWalk = () => {
+        if (this.village) return this.village.walkHere()
+        // in the office: walk to the nearest entrance; stepping on it teleports into the Market Square
+        const p = this.player.currentTilePosition
+        const target = this.villageEntrances().sort((a, b) => (Math.abs(a.x - p.x) + Math.abs(a.y - p.y)) - (Math.abs(b.x - p.x) + Math.abs(b.y - p.y)))[0]
+        if (target) this.player.moveToTile(target.x, target.y)
+    }
 
     private setUpSignalListeners = () => {
         signal.on('villageSay', this.onVillageSay)

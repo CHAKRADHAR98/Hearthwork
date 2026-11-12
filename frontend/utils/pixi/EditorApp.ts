@@ -128,6 +128,12 @@ export class EditorApp extends App {
                 const sprite = this.placePoolSprite(x, y)
                 this.setUpEraserTool(sprite, x, y, 'gizmo')
             }
+
+            if (value.villageId) {
+                const [x, y] = key.split(',').map(Number)
+                const sprite = this.placeVillageSprite(x, y)
+                this.setUpEraserTool(sprite, x, y, 'gizmo')
+            }
         }
 
         if (this.currentRoomIndex === this.realmData.spawnpoint.roomIndex) {
@@ -487,6 +493,8 @@ export class EditorApp extends App {
             return
         } else if (type === 'Pool') {
             this.placePool(x, y, tile, snapshot)
+        } else if (type === 'Village') {
+            this.placeVillage(x, y, tile, snapshot)
             return
         }
 
@@ -814,6 +822,30 @@ export class EditorApp extends App {
         this.updateRealmData(newRealmData, snapshot)
     }
 
+    private placeVillage = (x: number, y: number, tile: PIXI.Sprite, snapshot: boolean) => {
+        const key = `${x}, ${y}` as TilePoint
+        const t = this.realmData.rooms[this.currentRoomIndex].tilemap[key]
+        if (
+            (this.realmData.spawnpoint.x === x && this.realmData.spawnpoint.y === y) ||
+            t?.teleporter || t?.privateAreaId || t?.marketAreaId || t?.poolId || t?.villageId || t?.impassable
+        ) return
+        const newRealmData = this.getRealmDataCopy()
+        newRealmData.rooms[this.currentRoomIndex].tilemap[key] = { ...newRealmData.rooms[this.currentRoomIndex].tilemap[key], villageId: 'village' }
+        this.updateRealmData(newRealmData, snapshot)
+        this.placeVillageSprite(x, y, tile)
+    }
+
+    private placeVillageSprite = (x: number, y: number, tile?: PIXI.Sprite) => {
+        const key = `${x}, ${y}` as TilePoint
+        const sprite = tile || new PIXI.Sprite(PIXI.Texture.from('/sprites/teleport-tile.png'))
+        sprite.tint = 0xE0B93A
+        sprite.x = x * 32
+        sprite.y = y * 32
+        this.gizmoContainer.addChild(sprite)
+        this.gizmoSprites[key] = sprite
+        return sprite
+    }
+
     private removeGizmoFromRealmData = (x: number, y: number, snapshot: boolean) => {
         const key = `${x}, ${y}` as TilePoint
         const newRealmData = this.getRealmDataCopy()
@@ -823,6 +855,7 @@ export class EditorApp extends App {
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].privateAreaId
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].marketAreaId
             delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].poolId
+            delete newRealmData.rooms[this.currentRoomIndex].tilemap[key].villageId
 
             // delete the key if no data on it
             if (Object.keys(newRealmData.rooms[this.currentRoomIndex].tilemap[key]).length === 0) {
@@ -1028,6 +1061,11 @@ export class EditorApp extends App {
             marketTile.tint = 0xAA44FF
             const layer = 'gizmo'
             return { data: {} as SpriteSheetTile, layer, tile: marketTile, type: 'Market' }
+        } else if (this.specialTileMode === 'Village') {
+            const villageTile = new PIXI.Sprite(PIXI.Texture.from('/sprites/teleport-tile.png'))
+            villageTile.tint = 0xE0B93A
+            const layer = 'gizmo'
+            return { data: {} as SpriteSheetTile, layer, tile: villageTile, type: 'Village' }
         } else if (this.specialTileMode === 'Pool') {
             const poolTile = new PIXI.Sprite(PIXI.Texture.from('/sprites/faded-tile.png'))
             poolTile.tint = 0x00FF88

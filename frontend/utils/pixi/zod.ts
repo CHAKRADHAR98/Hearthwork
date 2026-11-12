@@ -15,6 +15,7 @@ const TileSchema = z.object({
   privateAreaId: z.string().optional(),
   marketAreaId: z.string().optional(),
   poolId: z.string().optional(),
+  villageId: z.string().optional(),
 })
 
 const TileMapSchema = z.record(z.string().regex(/^(-?\d+), (-?\d+)$/), TileSchema)

@@ -87,8 +87,9 @@ export class VillageLayer {
         return null
     }
 
-    async mount(npcs: NpcInfo[], spawn: { x: number; y: number }) {
-        this.origin = this.findOrigin(spawn)
+    /** `origin` is fixed inside the generated Market Square room; `exit` is the tile that leads back to the office. */
+    async mount(npcs: NpcInfo[], origin: { x: number; y: number } | null, spawn: { x: number; y: number }, exit?: { x: number; y: number }) {
+        this.origin = origin ?? this.findOrigin(spawn)
         if (!this.origin) {
             console.warn('[village] no room for the Market Square on this map')
             return
@@ -153,6 +154,7 @@ export class VillageLayer {
         }
         this.app.sortObjectsByY()
         this.updateShops(npcs)
+        if (exit) this.addLabel('⬇ Back to the office', exit.x * 32 + 16, exit.y * 32 - 2)
 
         this.interval = setInterval(() => this.checkProximity(), 250)
     }
@@ -208,8 +210,26 @@ export class VillageLayer {
 
     destroy() {
         if (this.interval) clearInterval(this.interval)
+        if (this.current) signal.emit('villageProximity', null)
         Object.values(this.npcs).forEach(n => n.parent.destroy({ children: true }))
         this.npcs = {}
         this.container.destroy({ children: true })
     }
+}
+
+/** Glowing markers on Market Square entrance tiles in the office, so players can see where to go. */
+export function drawEntrances(layer: PIXI.Container, tiles: { x: number; y: number }[]) {
+    const c = new PIXI.Container()
+    for (const { x, y } of tiles) {
+        const g = new PIXI.Graphics()
+        g.roundRect(x * 32 + 2, y * 32 + 2, 28, 28, 6).fill({ color: 0xe0b93a, alpha: 0.45 }).stroke({ color: 0xfff3d6, width: 2, alpha: 0.9 })
+        const t = new PIXI.Text({ text: '🏘️ Market Square', style: { fontFamily: 'silkscreen', fontSize: 128, fill: 0xfff3d6, stroke: { color: 0x1f1913, width: 20 } } })
+        t.scale.set(0.08)
+        t.anchor.set(0.5, 1)
+        t.x = x * 32 + 16
+        t.y = y * 32 - 2
+        c.addChild(g, t)
+    }
+    layer.addChild(c)
+    return c
 }

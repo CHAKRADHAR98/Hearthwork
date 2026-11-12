@@ -12,3 +12,7 @@ export const VILLAGE_NPCS: NpcInfo[] = [
 export const GOOD_ICONS: Record<string, string> = {
     coin: '🪙', wheat: '🌾', iron: '🪨', fish: '🐟', wool: '🧶', bread: '🍞', tools: '🔨', cloth: '🧵',
 }
+
+/** Must match backend/src/village/marketRoom.ts */
+export const MARKET_ROOM = 'Market Square'
+export const MARKET_ORIGIN = { x: 4, y: 2 }

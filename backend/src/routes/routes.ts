@@ -1,3 +1,4 @@
+import { withMarketSquare } from '../village/marketRoom'
 import { Router, Request, Response, NextFunction } from 'express'
 import { GetPlayersInRoom, GetPlayerCounts } from './route-types'
 import { z } from 'zod'
@@ -156,6 +157,8 @@ export default function routes(): Router {
                 return res.status(403).json({ message: 'Only owner' })
             }
 
+            // Players get the generated Market Square room; the editor gets the map exactly as saved.
+            if (req.query.play === '1' && realm.map_data) realm.map_data = withMarketSquare(realm.map_data)
             return res.json({ realm })
         } catch (error) {
             console.error('Error fetching realm:', error)

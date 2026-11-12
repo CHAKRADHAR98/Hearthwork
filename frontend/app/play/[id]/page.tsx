@@ -20,7 +20,7 @@ export default async function Play({ params, searchParams }: { params: { id: str
 
     // Fetch realm data from backend API
     const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
-    const response = await fetch(`${API_URL}/realms/${params.id}`, {
+    const response = await fetch(`${API_URL}/realms/${params.id}?play=1`, {
         headers: {
             'Authorization': `Bearer ${token}`,
         },
