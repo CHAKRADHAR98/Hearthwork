@@ -515,10 +515,13 @@ export class EditorApp extends App {
             return
         } else if (type === 'Pool') {
             this.placePool(x, y, tile, snapshot)
+            return
         } else if (type === 'Village') {
             this.placeVillage(x, y, tile, snapshot)
+            return
         } else if (type === 'Market Spot') {
             this.placeSpot(x, y, tile, snapshot)
+            return
         } else if (type === 'Market Exit') {
             this.placeExit(x, y, tile, snapshot)
             return
