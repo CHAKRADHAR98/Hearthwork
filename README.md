@@ -13,7 +13,7 @@ Built for **NEAR Hackathon 2026**. Tracks: **Games With Real Economies** (main) 
 
 ### ▶ Live demo: **https://hearthwork.vercel.app**
 Register with any username and password (or **Continue with Google**). No wallet, no seed phrase, no gas.
-The demo runs on NEAR **testnet** and stays up until at least 2026-11-25. Demo video: _[link to the X post]_.
+The demo runs on NEAR **testnet** and stays up until at least 2026-11-25. Demo video (5 min walkthrough): https://www.loom.com/share/6d0a6a28be1d42ebb2c19aa08cd2e5a6 · X post: https://x.com/playhearthwork/status/2121205484095209931.
 
 ---
 
