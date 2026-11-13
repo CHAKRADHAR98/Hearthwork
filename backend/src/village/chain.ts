@@ -250,8 +250,9 @@ class Chain {
             // changes to item types the contract doesn't know yet stay pending (the game keeps working off-chain for them)
             const deltas = wallets.pendingDeltas().filter(d => !this.unregistered.has(d.token))
             if (!deltas.length) return
-            for (let i = 0; i < deltas.length; i += 40) {
-                const batch = deltas.slice(i, i + 40)
+            // up to 100 balance changes per transaction (~0.3 Tgas each), so busy moments need few calls
+            for (let i = 0; i < deltas.length; i += 100) {
+                const batch = deltas.slice(i, i + 100)
                 const entries = batch.map(d => ({ account_id: d.accountId, token_id: d.token, amount: String(Math.abs(d.amount)), increase: d.amount > 0 }))
                 const ups = batch.filter(d => d.amount > 0).length
                 const summary = `Settled ${batch.length} balance changes (${ups} up, ${batch.length - ups} down): ${memo}`

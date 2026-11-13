@@ -15,7 +15,10 @@ import { sessionManager } from '../session'
 
 const HOUR_MS = Number(process.env.VILLAGE_HOUR_MS || 2500) // one game hour; a day lasts one minute
 const FAST_HOUR_MS = 350 // fast-forward: a week in about a minute
-const SETTLE_MS = Number(process.env.NEAR_SETTLE_MS || 15000)
+// Each settlement is one NEAR transaction (about 0.001-0.002 testnet NEAR of gas), so batch generously.
+const SETTLE_MS = Number(process.env.NEAR_SETTLE_MS || 60_000)
+/** An office's village pauses (saved, no ticks, no on-chain settlement) after this long with nobody in the office. */
+const IDLE_PAUSE_MS = Number(process.env.VILLAGE_IDLE_PAUSE_MS || 3 * 60_000)
 const STARTING_COINS = 40
 /** Testnet NEAR given to each new player's wallet so they can bet and use the team pool. */
 const WELCOME_GRANT = parseNear(process.env.NEAR_WELCOME_GRANT || '0.05')
@@ -31,6 +34,8 @@ interface Running {
     lastEventSent: number
     conversations: Record<string, { from: 'player' | 'shop'; text: string; offer?: number }[]>
     lastGossip: number
+    /** When the office last became empty (undefined while someone is there). */
+    emptySince?: number
 }
 
 class VillageManager {
@@ -56,6 +61,33 @@ class VillageManager {
             const day = Object.values(this.running)[0]?.village.day
             chain.settle(this.wallets, day ? `village activity up to day ${day}` : 'village activity')
         }, SETTLE_MS)
+        setInterval(() => this.pauseIdleVillages(), 30_000)
+    }
+
+    /**
+     * Villages only run while someone is in the office. An empty office would otherwise keep simulating and
+     * settling on-chain forever (each settlement costs gas), so after IDLE_PAUSE_MS it is saved and paused.
+     * It resumes from where it stopped the next time anyone joins (`get`).
+     */
+    private pauseIdleVillages() {
+        const now = Date.now()
+        for (const [realmId, r] of Object.entries(this.running)) {
+            const inOffice = sessionManager.getSession(realmId)?.getPlayerCount() ?? 0
+            const inVillage = this.io.sockets.adapter.rooms.get(this.room(realmId))?.size ?? 0
+            if (inOffice > 0 || inVillage > 0 || r.fastForwardLeft > 0) {
+                r.emptySince = undefined
+                continue
+            }
+            r.emptySince ??= now
+            if (now - r.emptySince < IDLE_PAUSE_MS) continue
+            clearTimeout(r.timer)
+            const snap = r.village.toJSON()
+            this.saved.set(`village:${realmId}`, snap)
+            delete this.running[realmId]
+            saveState([[`village:${realmId}`, snap], ['wallets', this.wallets.toJSON()]])
+                .catch(e => console.error('[village] save on pause failed', e?.message ?? e))
+            console.log(`[village] paused ${realmId} (office empty)`)
+        }
     }
 
     // ───────────────────────── lifecycle ─────────────────────────
