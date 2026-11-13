@@ -11,7 +11,26 @@ popup or a gas fee.
 
 Built for **NEAR Hackathon 2026**. Tracks: **Games With Real Economies** (main) and **Agent Economy**.
 
+### ▶ Live demo: **https://hearthwork.vercel.app**
+Register with any username and password (or **Continue with Google**). No wallet, no seed phrase, no gas.
+The demo runs on NEAR **testnet** and stays up until at least 2026-11-25. Demo video: _[link to the X post]_.
+
 ---
+
+## The problem
+
+**Game economies are fake.** NPC merchants have bottomless pockets and fixed price lists. Nothing you do changes the
+market, so trading is a chore instead of a game.
+
+**Crypto games make you notice the chain.** Wallet pop-ups, seed phrases and gas fees greet players before any fun
+starts, and most "on-chain economies" are just tokens bolted onto a static game.
+
+**Remote teams have nothing to do together.** Virtual offices copy the floor plan, but give people no shared goal and
+no reason to drop by.
+
+**Hearthwork answers all three:** a pixel office with a Market Square where AI shopkeepers run real businesses with real
+NEAR wallets, prices come from actual supply and demand, the whole team plays together, and the blockchain stays
+completely out of sight.
 
 ## What you can do
 
@@ -46,7 +65,7 @@ Built for **NEAR Hackathon 2026**. Tracks: **Games With Real Economies** (main) 
 | **NEAR AI Cloud** (OpenAI-compatible) for shopkeeper dialogue and gossip | [`backend/src/village/agents.ts`](backend/src/village/agents.ts) |
 | **Social login**: Google sign-in creates the user and their NEAR wallet | [`backend/src/auth/routes.ts`](backend/src/auth/routes.ts) `/auth/google` |
 
-When you trade with a shopkeeper, the game sends one `trade` call: your coins and their goods swap atomically on-chain. Everything else (gathering, crafting, townsfolk purchases, upkeep, shop-to-shop trades) is settled every 15 seconds with a single `apply_deltas` call, so on-chain balances always match the game. Open the **Market board → On NEAR** tab to see every transaction with explorer links.
+When you trade with a shopkeeper, the game sends one `trade` call: your coins and their goods swap atomically on-chain. Everything else (gathering, crafting, townsfolk purchases, upkeep, shop-to-shop trades) is settled every 60 seconds in batched `apply_deltas` calls (up to 100 changes each), so on-chain balances always match the game. A village pauses after 3 minutes with nobody in its office (saved, no gas spent) and resumes on the next visit, and the server audits on-chain balances every 10 minutes to repair any drift. Open the **Market board → On NEAR** tab to see every transaction with explorer links.
 
 ## Run it locally
 
@@ -72,13 +91,16 @@ ROOT=<you>.testnet ./scripts/deploy-contracts.sh       # builds, deploys and ini
 # then set NEAR_ROOT_ACCOUNT=<you>.testnet in backend/.env and restart the backend
 ```
 
-Optional: set `NEARAI_API_KEY` (AI shopkeepers) and `GOOGLE_CLIENT_ID` (Google sign-in) in `backend/.env`.
+Optional: set `NEARAI_API_KEY` (AI shopkeepers) and `GOOGLE_CLIENT_ID` (Google sign-in) in `backend/.env`, and
+`NEXT_PUBLIC_AGORA_APP_ID` + `APP_CERTIFICATE` (an Agora project in secured mode) in `frontend/.env.local` for proximity video.
 
 **Deploying:** see [DEPLOY.md](DEPLOY.md) (Vercel + Render + Neon, all free tiers). Game state is stored in Postgres (`game_state` table), and the server creates its tables on first start.
 
 ## Try it (do X → see Y)
 
-1. Open http://localhost:3000, register (or **Continue with Google**), click **Create Space**, then **Join** the office.
+These steps work on the **live demo** (https://hearthwork.vercel.app) and locally (http://localhost:3000).
+
+1. Open the site, click **Start your office**, register with any username and password (or **Continue with Google**), click **Create your first office**, then go back to **Your offices** and click **Enter office →** and **Join**.
    → A HUD in the top-left shows the clock, your 40 starting coins and your NEAR wallet (`<name>-xxxxxx.hearthwork.testnet`).
 2. Click **🚶 Market** (or walk onto the glowing **🏘️ Market Square** tile next to spawn). → You enter the Market Square, a room of its own with five stalls, shopkeepers and four gathering spots. The **⬇ Back to the office** path at the bottom takes you back. Office owners can move the entrance (**Editor → Special Tiles → Market Square**) and redesign the Market Square itself: it appears as a room in the editor, with **Market spot** tiles for each shopkeeper and gathering spot and a **Market exit** tile.
 3. Stand by the **⛏️ Iron mine** and press **E**. → "Gathered +1 🪨 Iron ore". There's a 20 s cooldown per spot.
@@ -93,6 +115,7 @@ Optional: set `NEARAI_API_KEY` (AI shopkeepers) and `GOOGLE_CLIENT_ID` (Google s
 12. Keep gathering. → Every so often a **✨ rare find** pops up (the chance grows with each empty gather). Press **B** to see it in your **📖 collection book**, and sell spares in the shop of the shopkeeper who collects them.
 13. Open **Tor**'s shop and buy a **⛏️ Pickaxe**, then gather at the mine. → Twice the iron, and the tool's wear bar in your bag goes down. Open **Ivo**'s shop and buy a **👒 Straw hat**. → Your character wears it, and teammates see it in the office too.
 14. Press **T** (or walk to the roped-off **🏗️ building site**) and give goods to the **🌉 Old Bridge**. Invite a teammate to help. → When it is complete, everyone in the office sees a celebration and the bridge **appears on your Market Square map**. In **Editor → Tiles → Landmarks** the bridge is now unlocked for this office only, and the fountain and well show 🔒.
+15. Open the office's **🔗 share link** in a second browser (or incognito), register a second player and join. Turn on 🎤/📷 in both and walk one character next to the other. → A **proximity video call** starts automatically and ends when you walk apart.
 
 ## Tests
 
@@ -131,9 +154,27 @@ frontend/app/play/finance/      predictions + team pool panels
 ## Built during the hackathon vs. before
 
 The repository's first commit ([`863fbf1`](../../commit/863fbf1), tag `pre-hackathon`) imports the office engine from an earlier project of mine: tile world, avatars, proximity video, map editor and the Express/Socket.io backend. It also contained Solana programs, which were **removed and replaced by NEAR**. **Everything after that commit was built during NEAR Hackathon 2026**: the three NEAR contracts, the village economy and AI shopkeepers, the Market Square (requests, rare finds, tools, hats and team-built landmarks), the NEAR prediction markets and team pool, gasless meta transactions, and Google sign-in.
-Full diff: [`pre-hackathon...main`](../../compare/pre-hackathon...main).
+Tags: `pre-hackathon` (the imported baseline) and `hackathon-submission` (the submitted version). Full diff: [`pre-hackathon...hackathon-submission`](../../compare/pre-hackathon...hackathon-submission).
 
-Libraries: near-sdk (Rust), near-api-js, google-auth-library, Next.js, Pixi.js, Socket.io, Express, PostgreSQL, Tailwind.
+**Libraries and services** (Q-005):
+- Contracts: `near-sdk` 5 (Rust), built with `cargo-near`; deployed with `near-cli-rs`.
+- Backend: Express, Socket.io, `near-api-js`, `pg` (PostgreSQL / Neon), `google-auth-library`, `jsonwebtoken`, `bcrypt`, `zod`.
+- Frontend: Next.js 14, React, Pixi.js, Tailwind CSS, Headless UI, Phosphor/Heroicons, GSAP, **Remotion** (`@remotion/player`, landing hero),
+  **Anime.js** (landing motion), **Agora** (`agora-rtc-sdk-ng`, `agora-token`, proximity video), react-toastify.
+- Services: NEAR testnet, **NEAR AI Cloud** (shopkeeper dialogue), Google Identity Services, Vercel, Render, Neon.
+- Character and tile sprites come from the imported baseline (pre-hackathon).
+
+**AI assistance:** most of the hackathon code was written with **Claude Code** (Anthropic) as a pair programmer, directed and
+reviewed by the author. AI-generated code is allowed by the rules (Q-005); everything is committed in this repo's history.
+
+## Security notes and next steps
+
+- **Custodial game wallets.** Players and shopkeepers get real NEAR accounts, but the game server holds their keys so
+  nobody sees a wallet or pays gas. The operator key lives only in the host's secret settings, never in this repo.
+- **Contracts can't be changed by the game server**: they were deployed with separate keys.
+- **Testnet only.** For mainnet: a separate operator account with a small balance, keys in a cloud KMS, and optional
+  non-custodial wallets (passkeys or chain signatures) where the server only relays what players sign.
+- Possible next steps: NEAR Intents to cash coins out to other tokens, AI-written request stories, more shops per office.
 
 ## License
 
