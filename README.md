@@ -49,6 +49,7 @@ completely out of sight.
 - **Bankruptcy, hiring and investing.** Shops pay upkeep every morning. A shop that can't pay closes until players invest enough to reopen it. Investors earn 40% of its daily profit. Shops short on inputs post delivery jobs ("bring me 9 iron for 45 coins").
 - **Collusion.** If one player supplies most of a good in a day, the shopkeepers form a price pact and lowball that player. A pact breaks when a member needs the goods too badly.
 - **AI haggling on NEAR AI Cloud.** Each shopkeeper has a personality. The model writes the dialogue and proposes prices, but `pricing.ts` sets hard limits it can't cross. Without an API key, a rule-based haggler takes over.
+- **Ready-made village, fully editable.** New offices start in a village office (fountain plaza, focus garden and meeting court as private video areas, a lounge and a team garden), and the Market Square comes with a shop lane, fields, a mine, a pond and a pasture. Owners can change both in the map editor or build their own.
 - **Fast-forward.** One button simulates a week of village life in about a minute so you can watch prices move on the market board.
 - **Office prediction markets and team pool.** Ask "Will we ship v2 by Friday?", trade YES/NO shares (LMSR pricing), resolve and claim. Keep a shared NEAR jar with a daily withdraw cap. Players sign these with their own wallets through NEAR meta transactions, and the server pays the gas.
 
@@ -58,7 +59,7 @@ completely out of sight.
 |---|---|
 | **NEP-245 multi-token contract**: every good plus `coin`, atomic goods-for-coin `trade`, `craft`, batched `apply_deltas` settlement, NEP-297 events | [`contracts/village_items`](contracts/village_items) → `items.hearthwork.testnet` |
 | **Prediction markets** (LMSR, fees, resolve, claim) | [`contracts/prediction_market`](contracts/prediction_market) → `market.hearthwork.testnet` |
-| **Team pool** (per-office NEAR pool, 10 NEAR per day withdraw cap) | [`contracts/team_pool`](contracts/team_pool) → `pool.hearthwork.testnet` |
+| **Team pool** (per-office NEAR pool, withdrawals capped at 10 NEAR per person per day) | [`contracts/team_pool`](contracts/team_pool) → `pool.hearthwork.testnet` |
 | **Items as tokens**: tools, hats and rare finds are NEP-245 token types too, registered on the contract by the game at startup | `chain.registerTokens`, [`backend/src/village/extras.ts`](backend/src/village/extras.ts) |
 | **Agent wallets**: every shopkeeper and every player gets a real NEAR sub-account | [`backend/src/village/chain.ts`](backend/src/village/chain.ts) `ensureAccount` |
 | **Gasless play** (NEP-366 meta transactions: the player's wallet signs, the server relays and pays gas) | `chain.callAs` |
@@ -102,8 +103,8 @@ These steps work on the **live demo** (https://hearthwork.vercel.app) and locall
 
 1. Open the site, click **Start your office**, register with any username and password (or **Continue with Google**), click **Create your first office**, then go back to **Your offices** and click **Enter office →** and **Join**.
    → A HUD in the top-left shows the clock, your 40 starting coins and your NEAR wallet (`<name>-xxxxxx.hearthwork.testnet`).
-2. Click **🚶 Market** (or walk onto the glowing **🏘️ Market Square** tile next to spawn). → You enter the Market Square, a room of its own with five stalls, shopkeepers and four gathering spots. The **⬇ Back to the office** path at the bottom takes you back. Office owners can move the entrance (**Editor → Special Tiles → Market Square**) and redesign the Market Square itself: it appears as a room in the editor, with **Market spot** tiles for each shopkeeper and gathering spot and a **Market exit** tile.
-3. Stand by the **⛏️ Iron mine** and press **E**. → "Gathered +1 🪨 Iron ore". There's a 20 s cooldown per spot.
+2. Click **🚶 Market** (or walk up the stone road from the fountain plaza to the glowing **🏘️ Market Square** gate). → You enter the Market Square, a room of its own: five shopkeepers along the shop lane, a stone plaza, and four gathering spots (wheat field, iron mine, fishing pond, sheep pasture). The **⬇ Back to the office** path at the bottom takes you back. Office owners can move the entrance (**Editor → Special Tiles → Market Square**) and redesign the Market Square itself: it appears as a room in the editor, with **Market spot** tiles for each shopkeeper and gathering spot and a **Market exit** tile.
+3. Stand by the **⛏️ Iron mine** and press **E**. → "+1 🪨" floats up over your character and the HUD count goes up. There's a 20 s cooldown per spot.
 4. Walk to **Tor** and press **E**, then **Sell** your iron. → Coins go up. In **Market board → On NEAR** a `trade` transaction appears with an explorer link.
 5. In Mira's shop, type "I'll give you 7 each" in **Haggle**. → She answers in character with a counter-offer. **Accept** buys at the agreed price.
 6. Hover **why?** next to any price. → The shopkeeper's reasoning from `pricing.ts`, for example "Stock 3/20 → +87%; Hoarding (stock is low)".
@@ -143,11 +144,13 @@ backend/src/village/extras.ts   rare finds, tools, hats, team projects and reque
 backend/src/village/agents.ts   NEAR AI haggling within pricing limits
 backend/src/village/chain.ts    NEAR bridge: wallets, trades, settlement, meta transactions
 backend/src/village/manager.ts  per-office villages, persistence, socket API
-backend/src/village/marketRoom.ts  generates the Market Square room and wires entrance tiles to it
+backend/src/village/marketRoom.ts  the Market Square room: default layout, entrance/exit wiring, team-build sites
+backend/src/village/defaultMarket.json  the default Market Square (generated, editable in the map editor)
 backend/src/finance/finance.ts  prediction markets + team pool API
 frontend/utils/pixi/village/    Market Square inside the Pixi.js office world
 frontend/app/play/village/      HUD, shop panel, market board, requests, bag, team build
 frontend/scripts/make-landmarks.py  generates the landmark sprites (bridge drawn; fountain and well recast from the village sheet)
+frontend/scripts/make-maps.py   generates the default office (frontend/utils/defaultmap.json) and Market Square from existing tiles
 frontend/app/play/finance/      predictions + team pool panels
 ```
 
@@ -171,7 +174,8 @@ reviewed by the author. AI-generated code is allowed by the rules (Q-005); every
 
 - **Custodial game wallets.** Players and shopkeepers get real NEAR accounts, but the game server holds their keys so
   nobody sees a wallet or pays gas. The operator key lives only in the host's secret settings, never in this repo.
-- **Contracts can't be changed by the game server**: they were deployed with separate keys.
+- **The game server can't change the contracts' code.** Its account is the contracts' operator (it can mint, settle and trade
+  within their rules), but the contracts were deployed with separate keys it doesn't hold, so it can't redeploy or replace them.
 - **Testnet only.** For mainnet: a separate operator account with a small balance, keys in a cloud KMS, and optional
   non-custodial wallets (passkeys or chain signatures) where the server only relays what players sign.
 - Possible next steps: NEAR Intents to cash coins out to other tokens, AI-written request stories, more shops per office.

@@ -74,6 +74,21 @@ class Chain {
     }
 
     /** Run chain work one call at a time so nonces and balances never race. */
+    /**
+     * The RPC refused the request because it's busy (HTTP 429). Nothing reached the chain, so this is never a
+     * failed transaction: wait and try again, and if it's still busy, the changes simply wait for the next round.
+     */
+    private async withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await fn()
+            } catch (e: any) {
+                if (!isRateLimited(e) || attempt >= 2) throw e
+                await new Promise(r => setTimeout(r, 1500 * (attempt + 1) ** 2)) // 1.5 s, then 6 s
+            }
+        }
+    }
+
     private enqueue<T>(fn: () => Promise<T>): Promise<T> {
         const p = this.queue.then(fn, fn)
         this.queue = p.catch(() => undefined)
@@ -99,13 +114,15 @@ class Chain {
             if (!this.account) throw new Error('NEAR is disabled')
             let res: any
             try {
-                res = await this.account.callFunctionRaw({
+                const account = this.account
+                res = await this.withRateLimitRetry(() => account.callFunctionRaw({
                     contractId, methodName, args,
                     gas: opts.gas ?? 100n * TGAS,
                     deposit: opts.deposit ?? 0n,
-                })
+                }))
             } catch (e: any) {
-                this.record(methodName, `${summary} (failed: ${String(e?.message ?? e).slice(0, 120)})`, null, false)
+                if (isRateLimited(e)) console.warn(`[near] RPC busy, ${methodName} not sent (it will be settled later): ${summary.slice(0, 80)}`)
+                else this.record(methodName, `${summary} (failed: ${String(e?.message ?? e).slice(0, 120)})`, null, false)
                 throw e
             }
             const failure = res?.status?.Failure
@@ -258,7 +275,8 @@ class Chain {
                 const summary = `Settled ${batch.length} balance changes (${ups} up, ${batch.length - ups} down): ${memo}`
                 try {
                     if (!this.account) return
-                    const res: any = await this.account.callFunctionRaw({ contractId: ITEMS_CONTRACT, methodName: 'apply_deltas', args: { entries, memo }, gas: 300n * TGAS })
+                    const account = this.account
+                    const res: any = await this.withRateLimitRetry(() => account.callFunctionRaw({ contractId: ITEMS_CONTRACT, methodName: 'apply_deltas', args: { entries, memo }, gas: 300n * TGAS }))
                     const failure = res?.status?.Failure
                     this.record('apply_deltas', summary, res, !failure)
                     if (!failure) wallets.markSynced(batch)
@@ -267,6 +285,11 @@ class Chain {
                         await this.resync(wallets, batch)
                     }
                 } catch (e: any) {
+                    if (isRateLimited(e)) {
+                        // nothing was sent: the changes stay pending and go out with the next settlement
+                        console.warn(`[near] RPC busy, ${batch.length} balance changes wait for the next settlement`)
+                        return
+                    }
                     this.record('apply_deltas', `${summary} (failed)`, null, false)
                     console.error('[near] apply_deltas error', e?.message)
                     await this.resync(wallets, batch)
@@ -284,7 +307,7 @@ class Chain {
         const parties = [...new Map(batch.map(d => [d.party, d.accountId])).entries()]
         for (const [party, accountId] of parties) {
             try {
-                const onChain: { token_id: string; amount: string }[] = await this.view(ITEMS_CONTRACT, 'balances_of', { account_id: accountId })
+                const onChain: { token_id: string; amount: string }[] = await this.withRateLimitRetry(() => this.view(ITEMS_CONTRACT, 'balances_of', { account_id: accountId }))
                 const tokens = new Set([...Object.keys(wallets.synced[party] ?? {}), ...onChain.map(b => b.token_id)])
                 const fresh: Record<string, number> = {}
                 for (const t of tokens) fresh[t] = Number(onChain.find(b => b.token_id === t)?.amount ?? 0)
@@ -319,7 +342,7 @@ class Chain {
                     const accountId = wallets.accountId(party)
                     let onChain: { token_id: string; amount: string }[]
                     try {
-                        onChain = await this.view(ITEMS_CONTRACT, 'balances_of', { account_id: accountId })
+                        onChain = await this.withRateLimitRetry(() => this.view(ITEMS_CONTRACT, 'balances_of', { account_id: accountId }))
                     } catch {
                         failed++
                         return
@@ -361,6 +384,10 @@ export function formatNear(yocto: bigint | string, digits = 4) {
 export function parseNear(near: number | string): bigint {
     const [w, f = ''] = String(near).split('.')
     return BigInt(w || '0') * YOCTO + BigInt((f + '0'.repeat(24)).slice(0, 24))
+}
+/** The RPC turned the request away because of its rate limit (nothing was sent to the chain). */
+export function isRateLimited(e: any) {
+    return /429|rate limit/i.test(String(e?.message ?? e))
 }
 /** Turn NEAR panics into a readable sentence. */
 export function cleanError(raw: string) {
