@@ -9,23 +9,27 @@
 //   only, so moving an entrance in the editor never leaves stale links behind.
 
 import type { RealmData, Room } from '../session'
+import DEFAULT_MARKET from './defaultMarket.json'
 
 export const MARKET_ROOM_NAME = 'Market Square'
 
-/** Default positions inside the default room (the client falls back to the same layout). */
-export const DEFAULT_SPOTS: Record<string, { x: number; y: number }> = {
-    farmer: { x: 6, y: 4 }, baker: { x: 10, y: 4 }, smith: { x: 14, y: 4 }, tailor: { x: 18, y: 4 }, fishmonger: { x: 6, y: 9 },
-    dock: { x: 9, y: 10 }, field: { x: 12, y: 10 }, mine: { x: 15, y: 10 }, pasture: { x: 18, y: 10 },
-}
-const W = 25
-const H = 20
-const EXIT = { x: 12, y: 19 }
+/** The default room, drawn with the game's own tiles by frontend/scripts/make-maps.py (editable in the map editor). */
+const DEFAULT_ROOM = DEFAULT_MARKET as unknown as Room & { market?: boolean }
+
+/** Where each shopkeeper and gathering spot stands in the default room (read from its villageSpot tiles). */
+export const DEFAULT_SPOTS: Record<string, { x: number; y: number }> = Object.fromEntries(
+    Object.entries(DEFAULT_ROOM.tilemap)
+        .filter(([, t]) => (t as { villageSpot?: string }).villageSpot)
+        .map(([k, t]) => { const [x, y] = k.split(',').map(Number); return [(t as { villageSpot: string }).villageSpot, { x, y }] }),
+)
+/** The road out of the default room; also the fallback exit for a customised room that lost all its exits. */
+const EXIT = { x: 19, y: 30 }
 
 /** Footprint (tiles) of each team-project landmark, and where it goes in the default room (bottom-left tile). */
 export const LANDMARKS: Record<string, { sprite: string; w: number; h: number; site: { x: number; y: number } }> = {
-    bridge: { sprite: 'landmarks-bridge', w: 4, h: 3, site: { x: 3, y: 16 } },
-    fountain: { sprite: 'landmarks-fountain', w: 4, h: 4, site: { x: 15, y: 17 } },
-    well: { sprite: 'landmarks-well', w: 2, h: 3, site: { x: 20, y: 16 } },
+    bridge: { sprite: 'landmarks-bridge', w: 4, h: 3, site: { x: 12, y: 29 } }, // left of the exit road
+    fountain: { sprite: 'landmarks-fountain', w: 4, h: 4, site: { x: 21, y: 20 } }, // middle of the plaza
+    well: { sprite: 'landmarks-well', w: 2, h: 3, site: { x: 23, y: 29 } }, // right of the exit road
 }
 
 type Tile = Room['tilemap'][`${number}, ${number}`] & { villageId?: string; villageSpot?: string; villageExit?: boolean; [k: string]: unknown }
@@ -36,39 +40,9 @@ export function isMarketRoom(room: Room) {
     return !!(room as MarketRoom).market || room.name === MARKET_ROOM_NAME
 }
 
-/** The default Market Square: walled dirt plaza, stalls and gathering spots, forest around it. */
+/** The default Market Square: shop lane, plaza, wheat field, mine, pond and pasture in a wood (a fresh copy each time). */
 export function defaultMarketRoom(): MarketRoom {
-    const t: Record<string, Tile> = {}
-    const PAD = 14
-    for (let x = -PAD; x < W + PAD; x++) for (let y = -PAD; y < H + PAD; y++) t[key(x, y)] = { floor: 'ground-normal_detailed_grass' }
-    for (let x = -PAD; x < W + PAD; x += 4) {
-        for (let y = -PAD; y < H + PAD; y += 4) {
-            // tree sprites are 5x5 tiles anchored at the bottom centre: keep the whole canopy outside the walls
-            const outside = x + 3 < -1 || x - 3 > W || y < -1 || y - 6 > H
-            if (outside) t[key(x, y)] = { floor: 'ground-normal_detailed_grass', object: 'grasslands-light_basic_tree_bundle' }
-        }
-    }
-    for (let x = 0; x < W; x++) {
-        for (let y = 0; y < H; y++) {
-            const tile: Tile = { floor: x >= 2 && x <= W - 3 && y >= 2 && y <= H - 3 ? 'ground-detailed_dirt' : 'ground-normal_detailed_grass' }
-            const wall =
-                y === 0 ? (x === 0 ? 'stone_wall_tl' : x === W - 1 ? 'stone_wall_tr' : 'stone_wall_top')
-                : y === H - 1 ? (x === 0 ? 'stone_wall_bl' : x === W - 1 ? 'stone_wall_br' : 'stone_wall_bottom')
-                : x === 0 ? 'stone_wall_left' : x === W - 1 ? 'stone_wall_right' : null
-            if (wall) {
-                tile.object = `grasslands-${wall}`
-                tile.impassable = true
-            }
-            t[key(x, y)] = tile
-        }
-    }
-    for (let y = H - 3; y < H; y++) t[key(EXIT.x, y)] = { floor: 'ground-detailed_dirt' }
-    t[key(EXIT.x, EXIT.y)] = { floor: 'ground-detailed_dirt', villageExit: true }
-    for (const [x, y, obj] of [[2, 17, 'village-crate'], [22, 17, 'village-crate'], [21, 2, 'village-small_crate']] as const) {
-        t[key(x, y)] = { ...t[key(x, y)], object: obj }
-    }
-    for (const [id, p] of Object.entries(DEFAULT_SPOTS)) t[key(p.x, p.y)] = { ...t[key(p.x, p.y)], villageSpot: id }
-    return { name: MARKET_ROOM_NAME, market: true, tilemap: t as Room['tilemap'] }
+    return { ...JSON.parse(JSON.stringify(DEFAULT_ROOM)), name: MARKET_ROOM_NAME, market: true }
 }
 
 function walkable(tile: Tile | undefined) {
